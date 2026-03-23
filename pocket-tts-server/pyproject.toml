@@ -1,0 +1,10 @@
+[project]
+name = "pocket-tts-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "pocket-tts>=1.1.1",
+    "python-multipart",
+    "uvicorn",
+]
