@@ -1,0 +1,15 @@
+[project]
+name = "gptsovits-server"
+version = "0.1.0"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "gpt-sovits-python",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "scipy",
+    "numpy",
+    "transformers>=4.33,<4.46",
+    "matplotlib",
+    "librosa",
+]
