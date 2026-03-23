@@ -1,0 +1,13 @@
+[project]
+name = "f5tts-server"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "f5-tts",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "scipy",
+    "numpy",
+    "soundfile",
+]
