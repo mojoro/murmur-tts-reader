@@ -1,0 +1,8 @@
+.venv/
+repo/
+models/
+voices/*.wav
+voices/*.txt
+__pycache__/
+*.pyc
+uv.lock

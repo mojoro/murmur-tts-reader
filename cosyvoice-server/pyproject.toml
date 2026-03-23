@@ -1,0 +1,40 @@
+[project]
+name = "cosyvoice-server"
+version = "0.1.0"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "scipy",
+    "numpy==1.26.4",
+    "soundfile",
+    "modelscope",
+    "conformer==0.3.2",
+    "HyperPyYAML==1.2.3",
+    "inflect==7.3.1",
+    "onnxruntime==1.18.0",
+    "openai-whisper==20231117",
+    "transformers==4.51.3",
+    "omegaconf==2.3.0",
+    "protobuf==4.25.0",
+    "wetext",
+    "librosa",
+    "x-transformers==2.11.24",
+    "regex",
+    "einops",
+    "torch==2.3.1",
+    "torchaudio==2.3.1",
+]
+
+[tool.uv]
+extra-build-dependencies = { openai-whisper = ["setuptools<81"] }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
