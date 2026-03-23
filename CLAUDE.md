@@ -1,0 +1,121 @@
+# pocket-tts
+
+Open-source, offline alternative to ElevenReader. Paste text, a URL, or a document — it synthesizes audio using a cloned voice, locally. No API keys required.
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Nuxt 3 + Vue 3 Composition API |
+| UI | Nuxt UI + Tailwind CSS |
+| Storage | SQLite (better-sqlite3 + Drizzle ORM) |
+| TTS Backends | FastAPI (Python) — 5 interchangeable engines |
+| Alignment | FastAPI (Python) — WhisperX forced-alignment |
+
+## Architecture
+
+```
+[pocket-tts-server]  ←── TTS_SERVER_URL (default :8000)
+[xtts-server      ]        │
+[f5tts-server     ]        ▼
+[gptsovits-server ]   [Nuxt server/api/]  ──→  [SQLite DB]
+[cosyvoice-server ]        │
+                           │
+[alignment-server ] ←── ALIGN_SERVER_URL (default :8001)
+(WhisperX FastAPI)         │
+                           ▼
+                    [Vue 3 frontend (Nuxt)]
+```
+
+All 5 TTS backends share an identical API surface. Switch between them by changing `TTS_SERVER_URL`.
+
+## Dev Commands
+
+### Frontend
+
+```bash
+npm run dev         # Nuxt dev server on port 3000
+```
+
+### TTS Backends (pick one)
+
+```bash
+# pocket-tts — 8 built-in voices, ~400MB model download on first run
+cd pocket-tts-server && uv run uvicorn main:app --port 8000
+
+# XTTS-v2 — multilingual, clone-only (no built-in voices), CUDA-aware
+cd xtts-server && uv run uvicorn main:app --port 8000
+
+# F5-TTS — clone-only, auto-transcribes reference audio
+cd f5tts-server && uv run uvicorn main:app --port 8000
+
+# GPT-SoVITS — clone-only, auto-trims reference to 3-10s
+cd gptsovits-server && uv run uvicorn main:app --port 8000
+
+# CosyVoice2 — zero-shot (with transcript) or cross-lingual
+cd cosyvoice-server && uv run uvicorn main:app --port 8000
+```
+
+### Alignment Server
+
+```bash
+cd alignment-server && uv run uvicorn main:app --port 8001
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TTS_SERVER_URL` | `http://localhost:8000` | Active TTS backend URL |
+| `ALIGN_SERVER_URL` | `http://localhost:8001` | WhisperX alignment server URL |
+
+## TTS Backend API Contract
+
+All 5 backends implement this interface:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | `{status, model_loaded, backend}` |
+| `/tts/voices` | GET | `{builtin: [...], custom: [...]}` |
+| `/tts/generate` | POST | Body: `{text, voice, language?}` → streams WAV (24 kHz) |
+| `/tts/clone-voice` | POST | Form: `name`, `file` (WAV), `prompt_text?` → saves voice |
+
+## Alignment Server API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/align` | POST | Form: `audio` (WAV), `text` (str) → `{words: [{word, start, end}]}` |
+
+## Database Schema
+
+```
+reads           id, title, type, source_url, file_name, content, created_at, updated_at, progress_segment, progress_word
+audio_segments  id, read_id, segment_index, text, audio_path, word_timings_json, generated_at
+voices          id, name, type (builtin|cloned), wav_path, created_at
+bookmarks       id, read_id, segment_index, word_offset, note, created_at
+```
+
+## Key Design Decisions
+
+- **Sentence-by-sentence streaming**: Text is split into sentences, each TTS'd separately. SSE streams progress to the client so playback begins before full generation completes.
+- **Word-level highlighting via WhisperX**: After generating each sentence WAV, the alignment server runs forced-alignment to produce word timestamps for reader highlighting.
+- **Swappable TTS backends**: All 5 backends share the same API. Switch by changing `TTS_SERVER_URL`.
+- **SQLite-first**: Library, audio metadata, voice profiles, and bookmarks all live in a local SQLite file.
+- **URL ingestion**: Web articles extracted via Readability; YouTube/podcast transcripts via dedicated extractors.
+
+## Feature Roadmap
+
+- [x] Text input → TTS → play/download
+- [x] Voice cloning (WAV upload + browser mic recording)
+- [x] 5 local TTS backends (pocket-tts, XTTS, F5, GPT-SoVITS, CosyVoice)
+- [ ] Nuxt 3 + Nuxt UI frontend
+- [ ] SQLite persistence (Drizzle ORM)
+- [ ] URL ingestion (web articles + YouTube transcripts)
+- [ ] Document import (PDF, EPUB, DOCX, TXT)
+- [ ] Audio library with playback history
+- [ ] Sentence-by-sentence streaming TTS
+- [ ] Word-level highlighting (WhisperX alignment)
+- [ ] Bookmarks with notes
+- [ ] Playback speed control
+- [ ] Voice profile management
+- [ ] Audio export
