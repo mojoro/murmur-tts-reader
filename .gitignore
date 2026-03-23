@@ -1,16 +1,38 @@
-# Node / Next.js
-node_modules/
-.next/
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
 tsconfig.tsbuildinfo
 
-# Environment
-.env*.local
+# Local env files
+.env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
 *.pyc
 .venv/
 uv.lock
+
+# SQLite
+pocket-tts.db
+pocket-tts.db-*
 
 # Claude Code
 .claude/
