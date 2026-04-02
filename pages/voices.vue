@@ -8,7 +8,7 @@
           variant="outline"
           icon="i-lucide-refresh-cw"
           :loading="pending"
-          @click="syncVoices"
+          @click="handleSync"
         >
           Sync
         </UButton>
@@ -78,6 +78,16 @@
 <script setup lang="ts">
 const { voices, pending, syncVoices, fetchVoicesFromDb } = useVoices()
 const cloneModalOpen = ref(false)
+const toast = useToast()
+
+async function handleSync() {
+  try {
+    await syncVoices()
+    toast.add({ title: 'Voices synced', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Sync failed', description: e.message, color: 'error' })
+  }
+}
 
 const builtinVoices = computed(() => voices.value.filter((v) => v.type === 'builtin'))
 const clonedVoices = computed(() => voices.value.filter((v) => v.type === 'cloned'))

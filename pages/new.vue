@@ -41,6 +41,7 @@ const creating = ref(false)
 
 const { createRead } = useLibrary()
 const { selectedVoice } = useVoices()
+const toast = useToast()
 
 const canCreate = computed(() => content.value.trim().length > 0 && selectedVoice.value)
 
@@ -50,7 +51,10 @@ async function handleCreate() {
   try {
     const readTitle = title.value.trim() || content.value.slice(0, 50).trim() + '...'
     const id = await createRead(readTitle, content.value.trim())
+    toast.add({ title: 'Read created', color: 'success' })
     await navigateTo(`/read/${id}`)
+  } catch (e: any) {
+    toast.add({ title: 'Failed to create read', description: e.message, color: 'error' })
   } finally {
     creating.value = false
   }
