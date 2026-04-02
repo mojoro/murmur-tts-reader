@@ -6,28 +6,33 @@ Open-source, offline alternative to ElevenReader. Paste text, a URL, or a docume
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Nuxt 3 + Vue 3 Composition API |
+| Frontend | Nuxt 3 + Vue 3 Composition API (PWA) |
 | UI | Nuxt UI + Tailwind CSS |
-| Storage | SQLite (better-sqlite3 + Drizzle ORM) |
+| Storage | SQLite in browser (sql.js WASM + Drizzle ORM + IndexedDB persistence) |
 | TTS Backends | FastAPI (Python) — 5 interchangeable engines |
 | Alignment | FastAPI (Python) — WhisperX forced-alignment |
 
 ## Architecture
 
 ```
-[pocket-tts-server]  ←── TTS_SERVER_URL (default :8000)
-[xtts-server      ]        │
-[f5tts-server     ]        ▼
-[gptsovits-server ]   [Nuxt server/api/]  ──→  [SQLite DB]
-[cosyvoice-server ]        │
-                           │
-[alignment-server ] ←── ALIGN_SERVER_URL (default :8001)
-(WhisperX FastAPI)         │
-                           ▼
-                    [Vue 3 frontend (Nuxt)]
+[TTS backend on Mac]  ←── configurable URL (localStorage)
+        │
+        ▼ (direct HTTP, same LAN)
+[Nuxt PWA in browser]
+  ├── sql.js (WASM SQLite) ──→ IndexedDB (persistence)
+  ├── Drizzle ORM (typed queries)
+  ├── Audio blobs ──→ IndexedDB
+  └── Service Worker (offline cache)
+
+[alignment-server on Mac] ←── configurable URL (localStorage)
+        ▲
+        │ (direct HTTP, same LAN)
+[Nuxt PWA in browser]
 ```
 
-All 5 TTS backends share an identical API surface. Switch between them by changing `TTS_SERVER_URL`.
+All 5 TTS backends share an identical API surface. Switch between them by changing the TTS Server URL in Settings.
+
+**PWA distribution:** Install via "Add to Home Screen" on iOS/Android — no app store required. Each device gets its own isolated SQLite database persisted in IndexedDB. The browser calls TTS/alignment backends directly over the local network.
 
 ## Dev Commands
 
@@ -62,12 +67,14 @@ cd cosyvoice-server && uv run uvicorn main:app --port 8000
 cd alignment-server && uv run uvicorn main:app --port 8001
 ```
 
-## Environment Variables
+## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TTS_SERVER_URL` | `http://localhost:8000` | Active TTS backend URL |
-| `ALIGN_SERVER_URL` | `http://localhost:8001` | WhisperX alignment server URL |
+Server URLs are configured per-device via the Settings page (`/settings`) and persisted in `localStorage`.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| TTS Server URL | `http://localhost:8000` | Active TTS backend URL |
+| Alignment Server URL | `http://localhost:8001` | WhisperX alignment server URL |
 
 ## TTS Backend API Contract
 
@@ -88,19 +95,24 @@ All 5 backends implement this interface:
 
 ## Database Schema
 
+Schema defined in `shared/schema.ts` (Drizzle ORM, used by sql.js in browser).
+
 ```
 reads           id, title, type, source_url, file_name, content, created_at, updated_at, progress_segment, progress_word
-audio_segments  id, read_id, segment_index, text, audio_path, word_timings_json, generated_at
+audio_segments  id, read_id, segment_index, text, audio_path (IndexedDB key), word_timings_json, generated_at
 voices          id, name, type (builtin|cloned), wav_path, created_at
 bookmarks       id, read_id, segment_index, word_offset, note, created_at
 ```
+
+Audio WAV blobs are stored separately in IndexedDB (via `useAudioStorage`), keyed by `readId:segmentIndex`.
 
 ## Key Design Decisions
 
 - **Sentence-by-sentence streaming**: Text is split into sentences, each TTS'd separately. SSE streams progress to the client so playback begins before full generation completes.
 - **Word-level highlighting via WhisperX**: After generating each sentence WAV, the alignment server runs forced-alignment to produce word timestamps for reader highlighting.
 - **Swappable TTS backends**: All 5 backends share the same API. Switch by changing `TTS_SERVER_URL`.
-- **SQLite-first**: Library, audio metadata, voice profiles, and bookmarks all live in a local SQLite file.
+- **Browser-side SQLite via sql.js**: Library, audio metadata, voice profiles, and bookmarks live in a SQLite database running in the browser (sql.js WASM), persisted to IndexedDB. Audio blobs stored separately in IndexedDB. No server-side database.
+- **PWA for distribution**: Installable on iOS/Android via "Add to Home Screen". Service Worker caches the app shell for offline use. Each device has its own isolated database.
 - **URL ingestion**: Web articles extracted via Readability; YouTube/podcast transcripts via dedicated extractors.
 
 ## Feature Roadmap
@@ -108,8 +120,8 @@ bookmarks       id, read_id, segment_index, word_offset, note, created_at
 - [x] Text input → TTS → play/download
 - [x] Voice cloning (WAV upload + browser mic recording)
 - [x] 5 local TTS backends (pocket-tts, XTTS, F5, GPT-SoVITS, CosyVoice)
-- [ ] Nuxt 3 + Nuxt UI frontend
-- [ ] SQLite persistence (Drizzle ORM)
+- [x] Nuxt 3 + Nuxt UI frontend (PWA)
+- [x] SQLite persistence (sql.js + Drizzle ORM + IndexedDB)
 - [ ] URL ingestion (web articles + YouTube transcripts)
 - [ ] Document import (PDF, EPUB, DOCX, TXT)
 - [ ] Audio library with playback history
