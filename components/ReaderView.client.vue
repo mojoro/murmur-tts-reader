@@ -8,19 +8,25 @@
       :class="segmentClasses(index)"
       @click="handleClick(index)"
     >
-      <p class="text-base leading-relaxed">{{ segment.text }}</p>
+      <WordHighlighter
+        v-if="getWordTimings(segment)"
+        :words="getWordTimings(segment)!"
+        :is-active="index === currentSegmentIndex"
+      />
+      <p v-else class="text-base leading-relaxed">{{ segment.text }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { AudioSegment } from '~/types/db'
+import type { WordTiming } from '~/types/tts'
 
 const props = defineProps<{
   segments: AudioSegment[]
 }>()
 
-const { currentSegmentIndex, playSegment, isPlaying } = useAudioPlayer()
+const { currentSegmentIndex, currentTime, playSegment, isPlaying } = useAudioPlayer()
 const containerRef = ref<HTMLElement | null>(null)
 const segmentRefs = ref<Record<number, HTMLElement>>({})
 
@@ -33,6 +39,15 @@ function segmentClasses(index: number) {
     'border-l-2 border-primary-500/50': hasAudio && !isActive,
     'border-l-2 border-transparent': !hasAudio && !isActive,
     'hover:bg-neutral-100 dark:hover:bg-neutral-900': !isActive,
+  }
+}
+
+function getWordTimings(segment: AudioSegment): WordTiming[] | null {
+  if (!segment.wordTimingsJson) return null
+  try {
+    return JSON.parse(segment.wordTimingsJson)
+  } catch {
+    return null
   }
 }
 
