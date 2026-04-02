@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#0a0a0a"/>
+  <g transform="translate(256, 256)">
+    <!-- Headphone arc -->
+    <path d="M-120,-40 A140,140 0 0,1 120,-40" stroke="#38bdf8" stroke-width="28" fill="none" stroke-linecap="round"/>
+    <!-- Left ear -->
+    <rect x="-148" y="-50" width="56" height="90" rx="16" fill="#38bdf8"/>
+    <!-- Right ear -->
+    <rect x="92" y="-50" width="56" height="90" rx="16" fill="#38bdf8"/>
+    <!-- Sound waves -->
+    <path d="M-40,80 Q-20,60 0,80 Q20,100 40,80" stroke="#38bdf8" stroke-width="12" fill="none" stroke-linecap="round"/>
+    <path d="M-60,110 Q-30,80 0,110 Q30,140 60,110" stroke="#38bdf8" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.6"/>
+  </g>
+</svg>
