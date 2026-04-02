@@ -86,6 +86,7 @@ const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 const speedItems = computed(() =>
   speeds.map((speed) => ({
     label: `${speed}x`,
+    icon: speed === playbackRate.value ? 'i-lucide-check' : undefined,
     click: () => setRate(speed),
   })),
 )

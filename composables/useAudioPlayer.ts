@@ -1,9 +1,17 @@
 import type { AudioSegment } from '~/types/db'
 
+const RATE_STORAGE_KEY = 'pocket-tts-playback-rate'
+
+function loadRate(): number {
+  if (!import.meta.client) return 1.0
+  const saved = localStorage.getItem(RATE_STORAGE_KEY)
+  return saved ? parseFloat(saved) : 1.0
+}
+
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
-const playbackRate = ref(1.0)
+const playbackRate = ref(loadRate())
 const currentSegmentIndex = ref(0)
 const segments = ref<AudioSegment[]>([])
 const currentObjectUrl = ref<string | null>(null)
@@ -91,6 +99,9 @@ export function useAudioPlayer() {
   function setRate(rate: number) {
     playbackRate.value = rate
     if (audio) audio.playbackRate = rate
+    if (import.meta.client) {
+      localStorage.setItem(RATE_STORAGE_KEY, String(rate))
+    }
   }
 
   function skipPrev() {
