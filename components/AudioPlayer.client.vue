@@ -3,7 +3,7 @@
     v-if="segments.length > 0"
     class="fixed bottom-0 left-0 right-0 z-50 border-t border-neutral-200 dark:border-neutral-800 backdrop-blur-lg bg-white/80 dark:bg-neutral-950/80 px-4 py-3"
   >
-    <div class="max-w-3xl mx-auto flex items-center gap-3">
+    <div class="max-w-3xl mx-auto flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
       <!-- Skip prev -->
       <UButton
         icon="i-lucide-skip-back"

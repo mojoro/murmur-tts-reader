@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="flex flex-col gap-1">
+  <div ref="containerRef" class="flex flex-col gap-1 max-w-prose selection:bg-primary-200 dark:selection:bg-primary-800">
     <div
       v-for="(segment, index) in segments"
       :key="segment.id"

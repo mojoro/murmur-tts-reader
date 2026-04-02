@@ -24,7 +24,17 @@
     <div class="flex flex-1 flex-col overflow-hidden">
       <AppHeader @toggle-sidebar="sidebarOpen = !sidebarOpen" />
       <main class="flex-1 overflow-y-auto p-4 lg:p-8">
-        <slot />
+        <Transition
+          enter-active-class="transition-opacity duration-150 ease-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition-opacity duration-100 ease-in"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+          mode="out-in"
+        >
+          <slot />
+        </Transition>
       </main>
     </div>
   </div>
