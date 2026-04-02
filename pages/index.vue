@@ -1,53 +1,28 @@
 <template>
-  <div class="max-w-2xl mx-auto p-8 flex flex-col gap-4">
-    <h1 class="text-xl font-bold">pocket-tts</h1>
+  <div class="max-w-4xl mx-auto flex flex-col gap-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold text-neutral-900 dark:text-neutral-50">Library</h1>
+      <UButton color="primary" icon="i-lucide-plus" to="/new">
+        New Read
+      </UButton>
+    </div>
 
-    <textarea
-      v-model="text"
-      class="w-full h-64 bg-[#111] border border-gray-700 rounded p-3 text-sm resize-none focus:outline-none focus:border-gray-500"
-      placeholder="Paste text here..."
+    <LibraryGrid
+      :reads="reads"
+      :loading="loading"
+      @delete="handleDelete"
     />
-
-    <button
-      :disabled="loading || !text.trim()"
-      class="px-4 py-2 bg-white text-black rounded font-semibold disabled:opacity-40 hover:bg-gray-200 transition-colors"
-      @click="generate"
-    >
-      {{ loading ? 'Generating…' : 'Read aloud' }}
-    </button>
-
-    <audio v-if="audioUrl" :src="audioUrl" controls autoplay class="w-full" />
-
-    <p v-if="error" class="text-red-400 text-sm">{{ error }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
-const { settings } = useSettings()
-const text = ref('')
-const audioUrl = ref<string | null>(null)
-const loading = ref(false)
-const error = ref<string | null>(null)
+const { reads, loading, fetchReads, deleteRead } = useLibrary()
 
-async function generate() {
-  loading.value = true
-  error.value = null
-  if (audioUrl.value) URL.revokeObjectURL(audioUrl.value)
-  audioUrl.value = null
+onMounted(() => {
+  fetchReads()
+})
 
-  try {
-    const res = await fetch(`${settings.value.ttsServerUrl}/tts/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text.value, voice: 'alba' }),
-    })
-    if (!res.ok) throw new Error(`Server error ${res.status}`)
-    const blob = await res.blob()
-    audioUrl.value = URL.createObjectURL(blob)
-  } catch (e: any) {
-    error.value = e.message
-  } finally {
-    loading.value = false
-  }
+async function handleDelete(id: number) {
+  await deleteRead(id)
 }
 </script>
