@@ -65,6 +65,24 @@
       icon="i-lucide-alert-circle"
     />
 
+    <!-- Bookmarks panel -->
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-medium text-neutral-500 uppercase tracking-wider">Bookmarks</h2>
+      <UButton
+        icon="i-lucide-bookmark-plus"
+        variant="ghost"
+        color="neutral"
+        size="sm"
+        @click="openBookmarkModal"
+      />
+    </div>
+    <BookmarkList :bookmarks="bookmarkList" @delete="deleteBookmark" />
+    <BookmarkAddModal
+      v-model:open="bookmarkModalOpen"
+      :segment-index="bookmarkSegmentIndex"
+      @add="handleAddBookmark"
+    />
+
     <!-- Reader view -->
     <ReaderView :segments="readData.segments" />
 
@@ -84,6 +102,11 @@ const { selectedVoice } = useVoices()
 const { generating, progress, total, error: ttsError, generate, abort } = useTTS()
 const { setSegments } = useAudioPlayer()
 
+const readIdRef = computed(() => id.value)
+const { bookmarks: bookmarkList, fetchBookmarks, addBookmark, deleteBookmark } = useBookmarks(readIdRef)
+const bookmarkModalOpen = ref(false)
+const bookmarkSegmentIndex = ref(0)
+
 const readData = ref<{ read: Read; segments: AudioSegment[] } | null>(null)
 
 async function loadRead() {
@@ -91,6 +114,7 @@ async function loadRead() {
   if (readData.value) {
     setSegments(readData.value.segments)
   }
+  await fetchBookmarks()
 }
 
 async function handleGenerate() {
@@ -98,6 +122,15 @@ async function handleGenerate() {
   await generate(id.value, readData.value.segments, selectedVoice.value)
   // Reload to get updated segments with audio paths
   await loadRead()
+}
+
+function openBookmarkModal() {
+  bookmarkSegmentIndex.value = useAudioPlayer().currentSegmentIndex.value
+  bookmarkModalOpen.value = true
+}
+
+async function handleAddBookmark(segmentIndex: number, note?: string) {
+  await addBookmark(segmentIndex, 0, note)
 }
 
 onMounted(() => {
