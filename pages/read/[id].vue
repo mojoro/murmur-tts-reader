@@ -20,12 +20,22 @@
           </span>
         </div>
       </div>
-      <UButton
-        icon="i-lucide-arrow-left"
-        variant="ghost"
-        color="neutral"
-        to="/"
-      />
+      <div class="flex items-center gap-1">
+        <UButton
+          icon="i-lucide-download"
+          variant="ghost"
+          color="neutral"
+          :loading="exporting"
+          :disabled="!readData?.segments.some(s => s.audioPath)"
+          @click="handleExport"
+        />
+        <UButton
+          icon="i-lucide-arrow-left"
+          variant="ghost"
+          color="neutral"
+          to="/"
+        />
+      </div>
     </div>
 
     <!-- Action bar -->
@@ -108,6 +118,34 @@ const bookmarkModalOpen = ref(false)
 const bookmarkSegmentIndex = ref(0)
 
 const readData = ref<{ read: Read; segments: AudioSegment[] } | null>(null)
+const exporting = ref(false)
+
+async function handleExport() {
+  if (!readData.value) return
+  exporting.value = true
+  try {
+    const { loadAudio } = useAudioStorage()
+    const segsWithAudio = readData.value.segments.filter((s) => s.audioPath)
+    if (segsWithAudio.length === 0) return
+
+    const blobs: Blob[] = []
+    for (const seg of segsWithAudio) {
+      const [readId, segIdx] = seg.audioPath!.split(':').map(Number)
+      const blob = await loadAudio(readId, segIdx)
+      if (blob) blobs.push(blob)
+    }
+
+    const combined = await concatWavBlobs(blobs)
+    const url = URL.createObjectURL(combined)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${readData.value.read.title.replace(/[^a-zA-Z0-9]/g, '_')}.wav`
+    a.click()
+    URL.revokeObjectURL(url)
+  } finally {
+    exporting.value = false
+  }
+}
 
 async function loadRead() {
   readData.value = await getRead(id.value)
