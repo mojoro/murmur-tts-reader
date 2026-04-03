@@ -54,6 +54,50 @@
           </template>
         </div>
       </template>
+
+      <template #file>
+        <div class="flex flex-col gap-4 mt-4">
+          <UFormField label="Document">
+            <div
+              class="flex flex-col items-center justify-center gap-2 p-8 border-2 border-dashed rounded-lg transition-colors cursor-pointer"
+              :class="isDragging ? 'border-primary-500 bg-primary-500/5' : 'border-neutral-300 dark:border-neutral-700'"
+              @click="fileInputRef?.click()"
+              @dragover.prevent="isDragging = true"
+              @dragleave="isDragging = false"
+              @drop.prevent="handleFileDrop"
+            >
+              <UIcon name="i-lucide-file-text" class="size-8 text-neutral-400" />
+              <p class="text-sm text-neutral-500">
+                {{ selectedFile ? selectedFile.name : 'Drop a file here or click to browse' }}
+              </p>
+              <p class="text-xs text-neutral-400">PDF, EPUB, DOCX, TXT, Markdown, or HTML</p>
+              <input
+                ref="fileInputRef"
+                type="file"
+                accept=".pdf,.epub,.docx,.txt,.md,.html,.htm"
+                class="hidden"
+                @change="handleFileSelect"
+              />
+            </div>
+          </UFormField>
+
+          <UAlert
+            v-if="fetchError"
+            color="error"
+            :title="fetchError"
+            icon="i-lucide-alert-circle"
+          />
+
+          <template v-if="content">
+            <UFormField label="Title">
+              <UInput v-model="title" placeholder="Document title..." class="w-full" />
+            </UFormField>
+            <UFormField label="Extracted Text">
+              <TextInput v-model="content" />
+            </UFormField>
+          </template>
+        </div>
+      </template>
     </UTabs>
 
     <UFormField label="Voice">
@@ -89,9 +133,14 @@ const fetchError = ref('')
 const creating = ref(false)
 const activeMode = ref('text')
 
+const selectedFile = ref<File | null>(null)
+const isDragging = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
 const inputModes = [
   { label: 'Text', slot: 'text' as const, value: 'text' },
   { label: 'From URL', slot: 'url' as const, value: 'url' },
+  { label: 'File', slot: 'file' as const, value: 'file' },
 ]
 
 const { createRead } = useLibrary()
@@ -118,14 +167,45 @@ async function handleFetchUrl() {
   }
 }
 
+async function handleFileSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input.files?.[0]) await processFile(input.files[0])
+}
+
+async function handleFileDrop(e: DragEvent) {
+  isDragging.value = false
+  const file = e.dataTransfer?.files[0]
+  if (file) await processFile(file)
+}
+
+async function processFile(file: File) {
+  selectedFile.value = file
+  fetching.value = true
+  fetchError.value = ''
+  content.value = ''
+  title.value = ''
+
+  try {
+    const parsed = await parseDocument(file)
+    title.value = parsed.title
+    content.value = parsed.content
+  } catch (e: any) {
+    fetchError.value = e.message || 'Failed to parse document'
+  } finally {
+    fetching.value = false
+  }
+}
+
 async function handleCreate() {
   if (!canCreate.value) return
   creating.value = true
   try {
     const readTitle = title.value.trim() || content.value.slice(0, 50).trim() + '...'
-    const type = activeMode.value === 'url' ? 'url' as const : 'text' as const
+    const typeMap = { text: 'text', url: 'url', file: 'file' } as const
+    const type = typeMap[activeMode.value as keyof typeof typeMap] ?? 'text'
     const sourceUrl = activeMode.value === 'url' ? url.value.trim() : undefined
-    const id = await createRead(readTitle, content.value.trim(), type, sourceUrl)
+    const fileName = activeMode.value === 'file' ? selectedFile.value?.name : undefined
+    const id = await createRead(readTitle, content.value.trim(), type, sourceUrl, fileName)
     toast.add({ title: 'Read created', color: 'success' })
     await navigateTo(`/read/${id}`)
   } catch (e: any) {
