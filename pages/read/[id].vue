@@ -107,10 +107,10 @@ import type { Read, AudioSegment } from '~/types/db'
 const route = useRoute()
 const id = computed(() => Number(route.params.id))
 
-const { getRead } = useLibrary()
+const { getRead, updateRead } = useLibrary()
 const { selectedVoice } = useVoices()
 const { generating, progress, total, error: ttsError, generate, abort } = useTTS()
-const { setSegments } = useAudioPlayer()
+const { setSegments, currentSegmentIndex } = useAudioPlayer()
 
 const readIdRef = computed(() => id.value)
 const { bookmarks: bookmarkList, fetchBookmarks, addBookmark, deleteBookmark } = useBookmarks(readIdRef)
@@ -119,6 +119,7 @@ const bookmarkSegmentIndex = ref(0)
 
 const readData = ref<{ read: Read; segments: AudioSegment[] } | null>(null)
 const exporting = ref(false)
+const initialLoadDone = ref(false)
 
 async function handleExport() {
   if (!readData.value) return
@@ -150,7 +151,9 @@ async function handleExport() {
 async function loadRead() {
   readData.value = await getRead(id.value)
   if (readData.value) {
-    setSegments(readData.value.segments)
+    const initialSegment = !initialLoadDone.value ? readData.value.read.progressSegment ?? 0 : undefined
+    setSegments(readData.value.segments, initialSegment)
+    initialLoadDone.value = true
   }
   await fetchBookmarks()
 }
@@ -173,6 +176,13 @@ async function handleAddBookmark(segmentIndex: number, note?: string) {
 
 onMounted(() => {
   loadRead()
+})
+
+// Save playback position when segment changes
+watch(currentSegmentIndex, (newIndex) => {
+  if (initialLoadDone.value && readData.value) {
+    updateRead(id.value, { progressSegment: newIndex })
+  }
 })
 
 const typeColor = computed(() => {

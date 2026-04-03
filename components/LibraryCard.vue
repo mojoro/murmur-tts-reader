@@ -17,6 +17,12 @@
         </UBadge>
       </div>
       <p class="text-sm text-neutral-500 line-clamp-2">{{ read.content }}</p>
+      <UProgress
+        v-if="progressPercent > 0"
+        :model-value="progressPercent"
+        size="xs"
+        class="mt-1"
+      />
       <div class="flex items-center justify-between mt-1">
         <span class="text-xs text-neutral-400">{{ timeAgo(read.createdAt) }}</span>
         <UButton
@@ -42,6 +48,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   delete: [id: number]
 }>()
+
+const totalSegments = computed(() => splitSentences(props.read.content).length)
+const progressPercent = computed(() => {
+  const progress = props.read.progressSegment ?? 0
+  if (progress <= 0 || totalSegments.value <= 1) return 0
+  return Math.round((progress / totalSegments.value) * 100)
+})
 
 const typeColor = computed(() => {
   switch (props.read.type) {

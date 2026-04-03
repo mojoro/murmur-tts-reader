@@ -71,8 +71,11 @@ async function playSegment(index: number) {
 }
 
 export function useAudioPlayer() {
-  function setSegments(segs: AudioSegment[]) {
+  function setSegments(segs: AudioSegment[], initialSegment?: number) {
     segments.value = segs
+    if (initialSegment !== undefined && initialSegment > 0 && initialSegment < segs.length) {
+      currentSegmentIndex.value = initialSegment
+    }
   }
 
   function play() {
