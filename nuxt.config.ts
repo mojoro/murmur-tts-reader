@@ -2,6 +2,8 @@
 export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@vite-pwa/nuxt'],
   compatibilityDate: '2025-03-23',
+  ssr: false,
+  css: ['./app.css'],
   devServer: {
     port: 4000
   },

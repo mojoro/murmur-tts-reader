@@ -1,5 +1,5 @@
-import initSqlJs, { type Database } from 'sql.js'
-import { drizzle, type SQLJsDatabase } from 'drizzle-orm/sql-js'
+import type { Database } from 'sql.js'
+import type { SQLJsDatabase } from 'drizzle-orm/sql-js'
 import * as schema from '~/shared/schema'
 
 const DB_NAME = 'pocket-tts'
@@ -96,6 +96,9 @@ async function saveToIDB(data: Uint8Array): Promise<void> {
 }
 
 async function initDatabase(): Promise<SQLJsDatabase<typeof schema>> {
+  const initSqlJs = (await import('sql.js')).default
+  const { drizzle } = await import('drizzle-orm/sql-js')
+
   const SQL = await initSqlJs({
     locateFile: () => '/sql-wasm.wasm',
   })

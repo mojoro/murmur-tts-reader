@@ -1,6 +1,6 @@
 <template>
-  <div class="max-w-2xl mx-auto p-8 flex flex-col gap-6">
-    <h1 class="text-xl font-bold">Settings</h1>
+  <div class="max-w-2xl mx-auto flex flex-col gap-6">
+    <h1 class="text-2xl font-bold text-neutral-900 dark:text-neutral-50">Settings</h1>
 
     <UFormField label="TTS Server URL">
       <UInput
