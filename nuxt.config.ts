@@ -7,6 +7,19 @@ export default defineNuxtConfig({
   devServer: {
     port: 4000
   },
+  vite: {
+    server: {
+      watch: {
+        ignored: [
+          '**/pocket-tts-server/**',
+          '**/xtts-server/**',
+          '**/f5tts-server/**',
+          '**/gptsovits-server/**',
+          '**/cosyvoice-server/**',
+        ],
+      },
+    },
+  },
   colorMode: {
     preference: 'dark'
   },

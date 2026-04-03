@@ -1,0 +1,6 @@
+# Python TTS backend directories (independent FastAPI apps)
+pocket-tts-server/
+xtts-server/
+f5tts-server/
+gptsovits-server/
+cosyvoice-server/
