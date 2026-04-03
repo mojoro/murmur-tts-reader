@@ -153,8 +153,11 @@ The header health indicator polls `TTS_SERVER_URL/health` every 30s.
 ## What's Implemented
 
 - Text input → sentence splitting → per-segment TTS → playback
-- Voice management (sync built-in from backend, clone via WAV upload)
+- URL ingestion (web articles via @mozilla/readability + CORS proxy)
+- Document import (PDF via pdf.js, EPUB via jszip, DOCX via mammoth, TXT)
+- Voice management (sync built-in from backend, clone via WAV upload or mic recording)
 - Audio player with skip, seek, speed control (0.5x–2.0x)
+- Playback position saved per read, restored on reopen, progress shown on library cards
 - Word-level highlighting during playback (WhisperX alignment)
 - Bookmarks with notes at segment level
 - Audio export (concatenates segment WAVs into single download)
@@ -164,7 +167,6 @@ The header health indicator polls `TTS_SERVER_URL/health` every 30s.
 
 ## Not Yet Implemented
 
-- URL ingestion (web articles, YouTube transcripts)
-- Document import (PDF, EPUB, DOCX, TXT)
-- Playback history / resume position
-- Mic recording for voice cloning (UI exists for WAV upload only)
+- YouTube transcript extraction (requires server-side, CORS blocks client-side)
+- Ability to choose which TTS backend you want to use
+- Word-by-word highlighting in playback
