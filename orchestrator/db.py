@@ -1,13 +1,13 @@
 import aiosqlite
 from pathlib import Path
 
-from orchestrator.config import DB_PATH
+import orchestrator.config as config
 
 _schema_path = Path(__file__).parent / "schema.sql"
 
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA foreign_keys=ON")
@@ -17,7 +17,7 @@ async def init_db():
 
 
 async def get_db():
-    db = await aiosqlite.connect(DB_PATH)
+    db = await aiosqlite.connect(config.DB_PATH)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys=ON")
     try:
