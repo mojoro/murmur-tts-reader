@@ -9,6 +9,7 @@ from orchestrator.routers.auth_router import router as auth_router
 from orchestrator.routers.reads import router as reads_router
 from orchestrator.routers.voices import router as voices_router
 from orchestrator.routers.settings import router as settings_router
+from orchestrator.routers.bookmarks import router as bookmarks_router
 
 
 @asynccontextmanager
@@ -32,3 +33,4 @@ app.include_router(auth_router)
 app.include_router(reads_router)
 app.include_router(voices_router)
 app.include_router(settings_router)
+app.include_router(bookmarks_router)
