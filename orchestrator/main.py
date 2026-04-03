@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import orchestrator.config as config
 from orchestrator.config import AUDIO_DIR, DATA_DIR
 from orchestrator.db import init_db
 from orchestrator.routers.auth_router import router as auth_router
@@ -10,6 +12,7 @@ from orchestrator.routers.reads import router as reads_router
 from orchestrator.routers.voices import router as voices_router
 from orchestrator.routers.settings import router as settings_router
 from orchestrator.routers.bookmarks import router as bookmarks_router
+from orchestrator.routers.health import router as health_router
 
 
 @asynccontextmanager
@@ -34,3 +37,12 @@ app.include_router(reads_router)
 app.include_router(voices_router)
 app.include_router(settings_router)
 app.include_router(bookmarks_router)
+app.include_router(health_router)
+
+
+@app.get("/audio/{read_id}/{segment_index}")
+async def serve_audio(read_id: int, segment_index: int):
+    path = config.AUDIO_DIR / str(read_id) / f"{segment_index}.wav"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Audio not found")
+    return FileResponse(path, media_type="audio/wav")
