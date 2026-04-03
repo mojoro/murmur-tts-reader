@@ -113,3 +113,17 @@ class HealthResponse(BaseModel):
     db: str
     active_engine: str | None
     alignment: str | None
+
+
+# --- Backends ---
+class BackendResponse(BaseModel):
+    name: str
+    display_name: str
+    description: str
+    size: str
+    status: str
+    gpu: bool
+    builtin_voices: bool
+
+class SelectBackendRequest(BaseModel):
+    name: str
