@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from orchestrator.config import AUDIO_DIR, DATA_DIR
 from orchestrator.db import init_db
+from orchestrator.routers.auth_router import router as auth_router
 
 
 @asynccontextmanager
@@ -24,4 +25,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers added in subsequent tasks
+app.include_router(auth_router)
