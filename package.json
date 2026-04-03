@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@nuxt/ui": "^3.3.7",
     "drizzle-orm": "^0.45.1",
     "nuxt": "^3.21.2",
