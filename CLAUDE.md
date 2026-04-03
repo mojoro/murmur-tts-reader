@@ -1,90 +1,126 @@
 # pocket-tts
 
-Open-source, offline alternative to ElevenReader. Paste text, a URL, or a document — it synthesizes audio using a cloned voice, locally. No API keys required.
+Open-source, offline alternative to ElevenReader. Paste text, select a voice, and it synthesizes audio using local TTS — no API keys, no cloud. Voice cloning supported.
 
 ## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Nuxt 3 + Vue 3 Composition API (PWA) |
-| UI | Nuxt UI + Tailwind CSS |
-| Storage | SQLite in browser (sql.js WASM + Drizzle ORM + IndexedDB persistence) |
-| TTS Backends | FastAPI (Python) — 5 interchangeable engines |
-| Alignment | FastAPI (Python) — WhisperX forced-alignment |
+| Frontend | Nuxt 3 + Vue 3 Composition API (PWA, SSR disabled) |
+| UI | Nuxt UI 3 + Tailwind CSS 4 (dark mode default, primary=sky, neutral=zinc) |
+| Storage | SQLite in browser (sql.js WASM + Drizzle ORM) persisted to IndexedDB |
+| Audio storage | IndexedDB (raw WAV blobs, keyed by `readId:segmentIndex`) |
+| TTS Backends | FastAPI (Python) — 5 interchangeable engines, all on port 8000 |
+| Alignment | FastAPI (Python) — WhisperX forced-alignment on port 8001 |
 
 ## Architecture
 
 ```
-[TTS backend on Mac]  ←── configurable URL (localStorage)
-        │
-        ▼ (direct HTTP, same LAN)
+[TTS backend]  ←── configurable URL (localStorage)
+      │
+      ▼ (direct HTTP, same LAN)
 [Nuxt PWA in browser]
   ├── sql.js (WASM SQLite) ──→ IndexedDB (persistence)
   ├── Drizzle ORM (typed queries)
-  ├── Audio blobs ──→ IndexedDB
+  ├── Audio blobs ──→ IndexedDB (separate from SQLite)
   └── Service Worker (offline cache)
-
-[alignment-server on Mac] ←── configurable URL (localStorage)
-        ▲
-        │ (direct HTTP, same LAN)
-[Nuxt PWA in browser]
+      │
+      ▼ (direct HTTP, same LAN)
+[Alignment server]  ←── configurable URL (localStorage)
 ```
 
-All 5 TTS backends share an identical API surface. Switch between them by changing the TTS Server URL in Settings.
-
-**PWA distribution:** Install via "Add to Home Screen" on iOS/Android — no app store required. Each device gets its own isolated SQLite database persisted in IndexedDB. The browser calls TTS/alignment backends directly over the local network.
+The frontend is a client-only PWA (`ssr: false`). Each device gets its own isolated SQLite + IndexedDB. The browser calls TTS/alignment backends directly over the network.
 
 ## Dev Commands
 
-### Frontend
-
 ```bash
-npm run dev         # Nuxt dev server on port 3000
+npm run dev    # Nuxt dev server (configured for port 4000, falls back to 3000)
+npm run build  # Production build
 ```
 
-### TTS Backends (pick one)
+### TTS Backends (pick one, all use port 8000)
 
 ```bash
-# pocket-tts — 8 built-in voices, ~400MB model download on first run
-cd pocket-tts-server && uv run uvicorn main:app --port 8000
-
-# XTTS-v2 — multilingual, clone-only (no built-in voices), CUDA-aware
-cd xtts-server && uv run uvicorn main:app --port 8000
-
-# F5-TTS — clone-only, auto-transcribes reference audio
-cd f5tts-server && uv run uvicorn main:app --port 8000
-
-# GPT-SoVITS — clone-only, auto-trims reference to 3-10s
-cd gptsovits-server && uv run uvicorn main:app --port 8000
-
-# CosyVoice2 — zero-shot (with transcript) or cross-lingual
-cd cosyvoice-server && uv run uvicorn main:app --port 8000
+cd pocket-tts-server && uv run uvicorn main:app --port 8000   # 8 built-in voices, ~400MB model
+cd xtts-server && uv run uvicorn main:app --port 8000          # Multilingual, clone-only, CUDA
+cd f5tts-server && uv run uvicorn main:app --port 8000         # Clone-only, auto-transcribes ref
+cd gptsovits-server && uv run uvicorn main:app --port 8000     # Clone-only, auto-trims ref 3-10s
+cd cosyvoice-server && uv run uvicorn main:app --port 8000     # Zero-shot or cross-lingual
 ```
 
-### Alignment Server
+## Project Structure
 
-```bash
-cd alignment-server && uv run uvicorn main:app --port 8001
+```
+pages/
+  index.vue              # / — Library grid (search, sort, delete)
+  new.vue                # /new — Create read (title, text, voice)
+  read/[id].vue          # /read/:id — Reader with TTS generation, playback, bookmarks
+  voices.vue             # /voices — Sync built-in, clone custom voices
+  settings.vue           # /settings — TTS + alignment server URLs
+
+components/
+  AppHeader.vue          # Top bar: hamburger, health indicator, color mode toggle
+  AppSidebar.vue         # Vertical nav menu (Library, New Read, Voices, Settings)
+  LibraryGrid.vue        # Search/sort/grid of LibraryCards + delete modal
+  LibraryCard.vue        # Individual read card with type badge, preview, timestamp
+  TextInput.vue          # Textarea with char count + read time estimate
+  VoiceSelector.vue      # Grouped dropdown (builtin/cloned) — used on /new and /read/:id
+  VoiceCloneModal.vue    # WAV upload + drag-drop + optional prompt text
+  ReaderView.client.vue  # Segment display with click-to-play and active highlighting
+  AudioPlayer.client.vue # Fixed bottom bar: play/pause, skip, seek, speed control
+  WordHighlighter.client.vue  # Word-by-word highlighting during playback
+  BookmarkAddModal.vue   # Add bookmark at current segment with note
+  BookmarkList.vue       # List/jump/delete bookmarks
+
+composables/
+  useDatabase.ts         # sql.js init, IDB persistence, singleton getDb()
+  useLibrary.ts          # Read CRUD, sentence splitting into segments
+  useTTS.ts              # Generation loop: TTS → align → store audio + timings
+  useVoices.ts           # Voice list sync from backend, selection state
+  useAudioPlayer.ts      # Playback control: play/pause/seek/skip/speed
+  useAudioStorage.ts     # IndexedDB ops for audio blobs (save/load/delete)
+  useBookmarks.ts        # Bookmark CRUD tied to a read ID
+  useSettings.ts         # localStorage for server URLs with defaults
+
+utils/
+  tts-client.ts          # HTTP client: fetchHealth, fetchVoices, generateAudio, cloneVoice
+  align-client.ts        # HTTP client: alignAudio (WhisperX)
+  sentence-splitter.ts   # Smart splitting (handles abbreviations, initials, decimals)
+  wav-concat.ts          # WAV blob concatenation for audio export
+
+shared/schema.ts         # Drizzle ORM schema (single source of truth for DB)
+types/db.ts              # Drizzle-inferred types (Read, AudioSegment, Voice, Bookmark)
+types/tts.ts             # API types (HealthResponse, VoicesResponse, WordTiming, etc.)
+layouts/default.vue      # Desktop sidebar + mobile USlideover drawer + header
+app.vue                  # Root: wraps everything in UApp > NuxtLayout > NuxtPage
+app.config.ts            # Nuxt UI theme: primary=sky, neutral=zinc
+app.css                  # @import "tailwindcss" + @import "@nuxt/ui"
 ```
 
-## Configuration
+## Database Schema
 
-Server URLs are configured per-device via the Settings page (`/settings`) and persisted in `localStorage`.
+Defined in `shared/schema.ts`. Runs in-browser via sql.js WASM.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| TTS Server URL | `http://localhost:8000` | Active TTS backend URL |
-| Alignment Server URL | `http://localhost:8001` | WhisperX alignment server URL |
+| Table | Key columns |
+|-------|-------------|
+| `reads` | id, title, type (text\|url\|file), source_url, file_name, content, created_at, updated_at, progress_segment, progress_word |
+| `audioSegments` | id, read_id (FK), segment_index, text, audio_path (IDB key), word_timings_json, generated_at |
+| `voices` | id, name (UNIQUE), type (builtin\|cloned), wav_path, created_at |
+| `bookmarks` | id, read_id (FK), segment_index, word_offset, note, created_at |
+
+Audio WAV blobs are stored separately in IndexedDB via `useAudioStorage`, keyed by `readId:segmentIndex`. The `audio_path` column in `audioSegments` stores this key.
+
+Drizzle migrations live in `server/db/migrations/` (generated via `npx drizzle-kit`), but are only used for reference — the browser creates tables directly from the schema.
 
 ## TTS Backend API Contract
 
-All 5 backends implement this interface:
+All 5 backends implement this identical interface:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | `{status, model_loaded, backend}` |
 | `/tts/voices` | GET | `{builtin: [...], custom: [...]}` |
-| `/tts/generate` | POST | Body: `{text, voice, language?}` → streams WAV (24 kHz) |
+| `/tts/generate` | POST | `{text, voice, language?}` → streams WAV (24 kHz) |
 | `/tts/clone-voice` | POST | Form: `name`, `file` (WAV), `prompt_text?` → saves voice |
 
 ## Alignment Server API
@@ -93,41 +129,42 @@ All 5 backends implement this interface:
 |----------|--------|-------------|
 | `/align` | POST | Form: `audio` (WAV), `text` (str) → `{words: [{word, start, end}]}` |
 
-## Database Schema
+## Configuration
 
-Schema defined in `shared/schema.ts` (Drizzle ORM, used by sql.js in browser).
+Server URLs are per-device via `/settings`, persisted in `localStorage`:
 
-```
-reads           id, title, type, source_url, file_name, content, created_at, updated_at, progress_segment, progress_word
-audio_segments  id, read_id, segment_index, text, audio_path (IndexedDB key), word_timings_json, generated_at
-voices          id, name, type (builtin|cloned), wav_path, created_at
-bookmarks       id, read_id, segment_index, word_offset, note, created_at
-```
+| Setting | Default |
+|---------|---------|
+| TTS Server URL | `http://localhost:8000` |
+| Alignment Server URL | `http://localhost:8001` |
 
-Audio WAV blobs are stored separately in IndexedDB (via `useAudioStorage`), keyed by `readId:segmentIndex`.
+The header health indicator polls `TTS_SERVER_URL/health` every 30s.
 
 ## Key Design Decisions
 
-- **Sentence-by-sentence streaming**: Text is split into sentences, each TTS'd separately. SSE streams progress to the client so playback begins before full generation completes.
-- **Word-level highlighting via WhisperX**: After generating each sentence WAV, the alignment server runs forced-alignment to produce word timestamps for reader highlighting.
-- **Swappable TTS backends**: All 5 backends share the same API. Switch by changing `TTS_SERVER_URL`.
-- **Browser-side SQLite via sql.js**: Library, audio metadata, voice profiles, and bookmarks live in a SQLite database running in the browser (sql.js WASM), persisted to IndexedDB. Audio blobs stored separately in IndexedDB. No server-side database.
-- **PWA for distribution**: Installable on iOS/Android via "Add to Home Screen". Service Worker caches the app shell for offline use. Each device has its own isolated database.
-- **URL ingestion**: Web articles extracted via Readability; YouTube/podcast transcripts via dedicated extractors.
+- **Client-only rendering** (`ssr: false`): sql.js WASM can't run server-side. The app is a pure client PWA.
+- **Dual IndexedDB storage**: SQLite (via sql.js) for structured data; raw IndexedDB for audio blobs. This avoids bloating the SQLite DB with binary data.
+- **Sentence-by-sentence TTS**: `splitSentences()` breaks text into segments. Each segment is TTS'd independently, enabling progressive playback and per-sentence alignment.
+- **Word-level highlighting**: After generating each segment's WAV, the alignment server runs WhisperX forced-alignment to produce word timestamps for the `WordHighlighter` component.
+- **Swappable backends**: All 5 TTS backends share the same API surface. Switch by changing the URL in settings.
+- **Voice requirement**: Creating a read requires selecting a voice. Voices come from the TTS backend (`/tts/voices`), so a connected backend is needed before creating reads.
+- **PWA distribution**: Installable via "Add to Home Screen". Service Worker caches the app shell. Each device has isolated storage.
 
-## Feature Roadmap
+## What's Implemented
 
-- [x] Text input → TTS → play/download
-- [x] Voice cloning (WAV upload + browser mic recording)
-- [x] 5 local TTS backends (pocket-tts, XTTS, F5, GPT-SoVITS, CosyVoice)
-- [x] Nuxt 3 + Nuxt UI frontend (PWA)
-- [x] SQLite persistence (sql.js + Drizzle ORM + IndexedDB)
-- [ ] URL ingestion (web articles + YouTube transcripts)
-- [ ] Document import (PDF, EPUB, DOCX, TXT)
-- [ ] Audio library with playback history
-- [ ] Sentence-by-sentence streaming TTS
-- [ ] Word-level highlighting (WhisperX alignment)
-- [ ] Bookmarks with notes
-- [ ] Playback speed control
-- [ ] Voice profile management
-- [ ] Audio export
+- Text input → sentence splitting → per-segment TTS → playback
+- Voice management (sync built-in from backend, clone via WAV upload)
+- Audio player with skip, seek, speed control (0.5x–2.0x)
+- Word-level highlighting during playback (WhisperX alignment)
+- Bookmarks with notes at segment level
+- Audio export (concatenates segment WAVs into single download)
+- Library with search, sort, delete
+- Dark mode (default) with toggle
+- Responsive layout (desktop sidebar, mobile drawer)
+
+## Not Yet Implemented
+
+- URL ingestion (web articles, YouTube transcripts)
+- Document import (PDF, EPUB, DOCX, TXT)
+- Playback history / resume position
+- Mic recording for voice cloning (UI exists for WAV upload only)
