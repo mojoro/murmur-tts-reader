@@ -5,7 +5,7 @@ pytestmark = pytest.mark.anyio
 
 async def test_register(client):
     res = await client.post("/auth/register", json={"email": "test@example.com", "password": "secret123"})
-    assert res.status_code == 200
+    assert res.status_code == 201
     data = res.json()
     assert data["user"]["email"] == "test@example.com"
     assert "token" in data

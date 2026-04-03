@@ -8,7 +8,7 @@ from orchestrator.models import RegisterRequest, LoginRequest, AuthResponse, Use
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", response_model=AuthResponse, status_code=201)
 async def register(req: RegisterRequest, db: aiosqlite.Connection = Depends(get_db)):
     existing = await db.execute_fetchall("SELECT id FROM users WHERE email = ?", (req.email,))
     if existing:
