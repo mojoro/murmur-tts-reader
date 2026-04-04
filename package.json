@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@vite-pwa/nuxt": "^1.1.1",
+    "fake-indexeddb": "^6.2.5",
     "vitest": "^4.1.2"
   }
 }

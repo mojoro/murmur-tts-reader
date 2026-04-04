@@ -119,3 +119,13 @@ export interface WordTiming {
   start: number
   end: number
 }
+
+// ── Offline ──
+
+export interface OfflineMutation {
+  id: string
+  url: string
+  method: 'PATCH' | 'POST' | 'DELETE'
+  body?: unknown
+  timestamp: number
+}
