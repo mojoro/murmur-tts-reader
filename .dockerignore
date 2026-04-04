@@ -1,0 +1,28 @@
+# .dockerignore
+.git
+.gitignore
+.nuxt
+.output
+.cache
+.venv
+__pycache__
+*.pyc
+node_modules
+data/
+orchestrator/data/
+*.egg-info
+
+# TTS engines (except pocket-tts-server, the default)
+xtts-server/
+f5tts-server/
+gptsovits-server/
+cosyvoice-server/
+
+# Dev/docs
+docs/
+*.md
+!alignment-server/*.md
+LICENSE
+.claude/
+.env
+.env.*
