@@ -1,57 +1,36 @@
-import { eq, and } from 'drizzle-orm'
-import { bookmarks } from '~/shared/schema'
-import type { Bookmark } from '~/types/db'
+import type { Bookmark } from '~/types/api'
 
 export function useBookmarks(readId: Ref<number>) {
-  const { getDb, persist } = useDatabase()
-
-  const bookmarkList = ref<Bookmark[]>([])
-  const loading = ref(false)
-
-  async function fetchBookmarks() {
-    loading.value = true
-    try {
-      const db = await getDb()
-      bookmarkList.value = await db
-        .select()
-        .from(bookmarks)
-        .where(eq(bookmarks.readId, readId.value))
-        .orderBy(bookmarks.segmentIndex)
-    } finally {
-      loading.value = false
-    }
-  }
+  const { data: bookmarks, status, refresh } = useFetch<Bookmark[]>(
+    () => `/api/reads/${readId.value}/bookmarks`,
+    { default: () => [] },
+  )
 
   async function addBookmark(segmentIndex: number, wordOffset: number = 0, note?: string) {
-    const db = await getDb()
-    await db.insert(bookmarks).values({
-      readId: readId.value,
-      segmentIndex,
-      wordOffset,
-      note: note ?? null,
+    await $fetch(`/api/reads/${readId.value}/bookmarks`, {
+      method: 'POST',
+      body: { segment_index: segmentIndex, word_offset: wordOffset, note },
     })
-    await persist()
-    await fetchBookmarks()
+    await refresh()
   }
 
   async function updateBookmark(id: number, note: string) {
-    const db = await getDb()
-    await db.update(bookmarks).set({ note }).where(eq(bookmarks.id, id))
-    await persist()
-    await fetchBookmarks()
+    await $fetch(`/api/bookmarks/${id}`, {
+      method: 'PATCH',
+      body: { note },
+    })
+    await refresh()
   }
 
   async function deleteBookmark(id: number) {
-    const db = await getDb()
-    await db.delete(bookmarks).where(eq(bookmarks.id, id))
-    await persist()
-    await fetchBookmarks()
+    await $fetch(`/api/bookmarks/${id}`, { method: 'DELETE' })
+    await refresh()
   }
 
   return {
-    bookmarks: readonly(bookmarkList),
-    loading: readonly(loading),
-    fetchBookmarks,
+    bookmarks,
+    loading: computed(() => status.value === 'pending'),
+    refresh,
     addBookmark,
     updateBookmark,
     deleteBookmark,

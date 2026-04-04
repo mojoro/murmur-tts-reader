@@ -9,7 +9,7 @@
       <UIcon name="i-lucide-bookmark" class="size-4 mt-0.5 text-primary-500 shrink-0" />
       <div class="flex-1 min-w-0">
         <p class="text-sm text-neutral-900 dark:text-neutral-50">
-          Segment {{ bookmark.segmentIndex + 1 }}
+          Segment {{ bookmark.segment_index + 1 }}
         </p>
         <p v-if="bookmark.note" class="text-xs text-neutral-500 line-clamp-2 mt-0.5">
           {{ bookmark.note }}
@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Bookmark } from '~/types/db'
+import type { Bookmark } from '~/types/api'
 
 defineProps<{
   bookmarks: Bookmark[]
@@ -45,6 +45,6 @@ const emit = defineEmits<{
 const { playSegment } = useAudioPlayer()
 
 function jumpTo(bookmark: Bookmark) {
-  playSegment(bookmark.segmentIndex)
+  playSegment(bookmark.segment_index)
 }
 </script>

@@ -19,20 +19,19 @@
 </template>
 
 <script setup lang="ts">
-import type { AudioSegment } from '~/types/db'
-import type { WordTiming } from '~/types/tts'
+import type { AudioSegment, WordTiming } from '~/types/api'
 
 const props = defineProps<{
   segments: AudioSegment[]
 }>()
 
-const { currentSegmentIndex, currentTime, playSegment, isPlaying } = useAudioPlayer()
+const { currentSegmentIndex, playSegment } = useAudioPlayer()
 const containerRef = ref<HTMLElement | null>(null)
 const segmentRefs = ref<Record<number, HTMLElement>>({})
 
 function segmentClasses(index: number) {
   const isActive = index === currentSegmentIndex.value
-  const hasAudio = !!props.segments[index]?.audioPath
+  const hasAudio = !!props.segments[index]?.audio_generated
 
   return {
     'bg-primary-500/10 ring-1 ring-primary-500/30': isActive,
@@ -43,21 +42,20 @@ function segmentClasses(index: number) {
 }
 
 function getWordTimings(segment: AudioSegment): WordTiming[] | null {
-  if (!segment.wordTimingsJson) return null
+  if (!segment.word_timings_json) return null
   try {
-    return JSON.parse(segment.wordTimingsJson)
+    return JSON.parse(segment.word_timings_json)
   } catch {
     return null
   }
 }
 
 function handleClick(index: number) {
-  if (props.segments[index]?.audioPath) {
+  if (props.segments[index]?.audio_generated) {
     playSegment(index)
   }
 }
 
-// Auto-scroll to active segment
 watch(currentSegmentIndex, (index) => {
   const el = segmentRefs.value[index]
   if (el) {

@@ -1,4 +1,4 @@
-import type { AudioSegment } from '~/types/db'
+import type { AudioSegment } from '~/types/api'
 
 const RATE_STORAGE_KEY = 'pocket-tts-playback-rate'
 
@@ -8,13 +8,13 @@ function loadRate(): number {
   return saved ? parseFloat(saved) : 1.0
 }
 
+// Module-level state is safe: audio playback is purely client-side.
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref(loadRate())
 const currentSegmentIndex = ref(0)
 const segments = ref<AudioSegment[]>([])
-const currentObjectUrl = ref<string | null>(null)
 
 let audio: HTMLAudioElement | null = null
 
@@ -29,9 +29,8 @@ function ensureAudio(): HTMLAudioElement {
     })
     audio.addEventListener('ended', () => {
       isPlaying.value = false
-      // Auto-advance to next segment
       const nextIndex = currentSegmentIndex.value + 1
-      if (nextIndex < segments.value.length && segments.value[nextIndex].audioPath) {
+      if (nextIndex < segments.value.length && segments.value[nextIndex].audio_generated) {
         playSegment(nextIndex)
       }
     })
@@ -47,21 +46,10 @@ function ensureAudio(): HTMLAudioElement {
 
 async function playSegment(index: number) {
   if (!import.meta.client) return
-  const { loadAudio, audioUrl } = useAudioStorage()
   const segment = segments.value[index]
-  if (!segment?.audioPath) return
+  if (!segment?.audio_generated) return
 
-  const [readId, segIdx] = segment.audioPath.split(':').map(Number)
-  const blob = await loadAudio(readId, segIdx)
-  if (!blob) return
-
-  // Revoke previous URL to prevent memory leaks
-  if (currentObjectUrl.value) {
-    URL.revokeObjectURL(currentObjectUrl.value)
-  }
-
-  const url = audioUrl(blob)
-  currentObjectUrl.value = url
+  const url = `/api/audio/${segment.read_id}/${segment.segment_index}`
   currentSegmentIndex.value = index
 
   const el = ensureAudio()
@@ -73,7 +61,7 @@ async function playSegment(index: number) {
 export function useAudioPlayer() {
   function setSegments(segs: AudioSegment[], initialSegment?: number) {
     segments.value = segs
-    if (initialSegment !== undefined && initialSegment > 0 && initialSegment < segs.length) {
+    if (initialSegment !== undefined && initialSegment > 0 && segs.length) {
       currentSegmentIndex.value = initialSegment
     }
   }
@@ -114,7 +102,7 @@ export function useAudioPlayer() {
 
   function skipNext() {
     const nextIndex = currentSegmentIndex.value + 1
-    if (nextIndex < segments.value.length && segments.value[nextIndex].audioPath) {
+    if (nextIndex < segments.value.length && segments.value[nextIndex].audio_generated) {
       playSegment(nextIndex)
     }
   }
@@ -124,10 +112,6 @@ export function useAudioPlayer() {
     if (audio) {
       audio.pause()
       audio.src = ''
-    }
-    if (currentObjectUrl.value) {
-      URL.revokeObjectURL(currentObjectUrl.value)
-      currentObjectUrl.value = null
     }
     isPlaying.value = false
     currentTime.value = 0
