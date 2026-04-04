@@ -34,6 +34,10 @@
         >
           Download
         </UButton>
+        <div v-else-if="backend.status === 'installing'" class="flex items-center gap-2">
+          <UIcon name="i-lucide-loader-2" class="size-4 animate-spin text-sky-500" />
+          <span class="text-xs text-sky-500">Installing...</span>
+        </div>
         <UBadge v-else-if="backend.status === 'unavailable'" color="error" variant="subtle">
           Unavailable
         </UBadge>
@@ -57,6 +61,7 @@ const emit = defineEmits<{
 function statusDotClass(status: EngineStatus) {
   switch (status) {
     case 'running': return 'bg-green-500'
+    case 'installing': return 'bg-sky-500 animate-pulse'
     case 'installed':
     case 'stopped': return 'bg-yellow-500'
     case 'available': return 'bg-neutral-400'

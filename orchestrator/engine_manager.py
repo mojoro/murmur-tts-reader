@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class EngineStatus(str, Enum):
     AVAILABLE = "available"
+    INSTALLING = "installing"
     INSTALLED = "installed"
     RUNNING = "running"
     STOPPED = "stopped"
@@ -48,8 +49,10 @@ class EngineManager:
         for name in ENGINES:
             engine_dir = self._engine_dir(name)
             if engine_dir.exists() and (engine_dir / "main.py").exists():
+                has_venv = (engine_dir / ".venv" / "bin" / "uvicorn").exists()
                 if self._statuses[name] == EngineStatus.AVAILABLE:
-                    self._statuses[name] = EngineStatus.INSTALLED
+                    self._statuses[name] = EngineStatus.INSTALLED if has_venv else EngineStatus.AVAILABLE
+                    logger.info("Engine %s: dir=%s venv=%s status=%s", name, engine_dir, has_venv, self._statuses[name])
 
     @property
     def active_engine(self) -> str | None:
@@ -197,6 +200,88 @@ class EngineManager:
         msg = {"event": event, "data": json.dumps(data)}
         for q in self._listeners:
             await q.put(msg)
+
+    async def install_engine(self, name: str) -> bool:
+        """Install an engine by creating its venv and installing deps."""
+        get_engine(name)
+        engine_dir = self._engine_dir(name)
+
+        if not engine_dir.exists() or not (engine_dir / "main.py").exists():
+            logger.error("Cannot install %s: source not found at %s", name, engine_dir)
+            return False
+
+        if (engine_dir / ".venv" / "bin" / "uvicorn").exists():
+            logger.info("Engine %s already installed", name)
+            self._statuses[name] = EngineStatus.INSTALLED
+            return True
+
+        self._statuses[name] = EngineStatus.INSTALLING
+        await self._emit_event("backend:status", {"name": name, "status": "installing"})
+        logger.info("Installing engine %s at %s", name, engine_dir)
+
+        try:
+            # Create venv
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "venv", cwd=str(engine_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.wait()
+            if proc.returncode != 0:
+                stderr = await proc.stderr.read()
+                logger.error("uv venv failed for %s: %s", name, stderr.decode())
+                self._statuses[name] = EngineStatus.AVAILABLE
+                await self._emit_event("backend:status", {"name": name, "status": "available"})
+                return False
+
+            venv_python = str(engine_dir / ".venv" / "bin" / "python")
+
+            # Install CPU-only torch first
+            logger.info("Installing CPU torch for %s", name)
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "pip", "install", "--python", venv_python,
+                "torch", "--index-url", "https://download.pytorch.org/whl/cpu",
+                cwd=str(engine_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.wait()
+            if proc.returncode != 0:
+                stderr = await proc.stderr.read()
+                logger.error("Torch install failed for %s: %s", name, stderr.decode())
+
+            # Install remaining deps from pyproject.toml
+            logger.info("Installing dependencies for %s", name)
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "pip", "install", "--python", venv_python,
+                "--requirement", "pyproject.toml",
+                cwd=str(engine_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.wait()
+            if proc.returncode != 0:
+                stderr = await proc.stderr.read()
+                logger.error("Dep install failed for %s: %s", name, stderr.decode()[-2000:])
+                self._statuses[name] = EngineStatus.AVAILABLE
+                await self._emit_event("backend:status", {"name": name, "status": "available"})
+                return False
+
+            # Install uvicorn explicitly (may not be in deps)
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "pip", "install", "--python", venv_python, "uvicorn[standard]",
+                cwd=str(engine_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.wait()
+
+            self._statuses[name] = EngineStatus.INSTALLED
+            await self._emit_event("backend:status", {"name": name, "status": "installed"})
+            logger.info("Engine %s installed successfully", name)
+            return True
+
+        except Exception:
+            logger.exception("Unexpected error installing engine %s", name)
+            self._statuses[name] = EngineStatus.AVAILABLE
+            await self._emit_event("backend:status", {"name": name, "status": "available"})
+            return False
 
     async def shutdown(self):
         await self.stop_engine()

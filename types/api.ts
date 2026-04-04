@@ -91,7 +91,7 @@ export interface Job {
 
 // ── Backends / Engines ──
 
-export type EngineStatus = 'available' | 'installed' | 'running' | 'stopped' | 'unavailable'
+export type EngineStatus = 'available' | 'installing' | 'installed' | 'running' | 'stopped' | 'unavailable'
 
 export interface Backend {
   name: string

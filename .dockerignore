@@ -12,12 +12,6 @@ data/
 orchestrator/data/
 *.egg-info
 
-# TTS engines (except pocket-tts-server, the default)
-xtts-server/
-f5tts-server/
-gptsovits-server/
-cosyvoice-server/
-
 # Dev/docs
 docs/
 *.md

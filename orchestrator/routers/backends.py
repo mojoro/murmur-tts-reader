@@ -66,11 +66,21 @@ async def install_backend(req: SelectBackendRequest):
         logger.info("Engine %s already installed (status=%s)", req.name, status.value)
         return {"message": f"Engine {req.name} is already installed"}
 
-    logger.warning("Install not supported for engine %s (status=%s)", req.name, status.value)
-    raise HTTPException(
-        status_code=501,
-        detail=f"Remote engine installation not yet supported. Mount the engine directory into the container.",
-    )
+    if status.value == "installing":
+        logger.info("Engine %s is already being installed", req.name)
+        return {"message": f"Engine {req.name} is already installing"}
+
+    # Run installation in background so we don't block the request
+    asyncio.create_task(_install_engine_task(req.name))
+    return {"message": f"Installing {req.name}..."}
+
+
+async def _install_engine_task(name: str):
+    success = await engine_manager.install_engine(name)
+    if success:
+        logger.info("Background install of %s completed", name)
+    else:
+        logger.error("Background install of %s failed", name)
 
 
 @router.get("/events")
