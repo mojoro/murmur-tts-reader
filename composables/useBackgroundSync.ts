@@ -1,7 +1,7 @@
 // composables/useBackgroundSync.ts
 import type { ReadSummary, ReadDetail } from '~/types/api'
 
-const SYNC_SETTING_KEY = 'murmur-auto-sync'
+const SYNC_SETTING_KEY = 'murmur-auto-sync-v2'
 const SYNC_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
 const BATCH_SIZE = 5 // audio fetches between pauses
 const BATCH_DELAY_MS = 500 // pause between batches to avoid saturating the network
