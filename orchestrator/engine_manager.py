@@ -86,9 +86,12 @@ class EngineManager:
         venv_uvicorn = engine_dir / ".venv" / "bin" / "uvicorn"
         if venv_uvicorn.exists():
             cmd = [str(venv_uvicorn), "main:app"]
+            logger.info("Using venv uvicorn: %s", venv_uvicorn)
         else:
             cmd = ["uv", "run", "uvicorn", "main:app"]
+            logger.info("Using uv run uvicorn (no venv found at %s)", venv_uvicorn)
 
+        logger.info("Launching: %s --host 0.0.0.0 --port %d (cwd=%s)", " ".join(cmd), config.ENGINE_PORT, engine_dir)
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             "--host", "0.0.0.0",
@@ -116,11 +119,13 @@ class EngineManager:
             await self._emit_event("backend:status", {"name": name, "status": "unavailable"})
             return False
 
+        logger.info("Engine %s is healthy on port %d", name, config.ENGINE_PORT)
         self._start_health_loop()
         await self._emit_event("backend:status", {"name": name, "status": "running"})
         return True
 
     async def stop_engine(self):
+        logger.info("Stopping engine: %s", self._active_engine)
         if self._health_task:
             self._health_task.cancel()
             self._health_task = None

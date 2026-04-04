@@ -68,6 +68,7 @@ class JobWorker:
             )
             await db.commit()
             job["status"] = "running"
+            logger.info("Picked job id=%d read=%d voice=%s engine=%s total=%d", job["id"], job["read_id"], job["voice"], job["engine"], job["total"])
             return job
 
     async def _process_job(self, job: dict):
@@ -81,6 +82,7 @@ class JobWorker:
 
         # Check engine availability
         if not engine_manager.get_engine_url():
+            logger.warning("Job %d: no engine available, setting waiting_for_backend", job_id)
             async with open_db() as db:
                 await db.execute(
                     "UPDATE jobs SET status = 'waiting_for_backend' WHERE id = ?",
@@ -123,6 +125,7 @@ class JobWorker:
 
             success = await self._process_segment(job, segment)
             if not success:
+                logger.error("Job %d: segment %d failed, marking job as failed", job_id, segment["segment_index"])
                 async with open_db() as db:
                     await db.execute(
                         "UPDATE jobs SET status = 'failed', error = ?, completed_at = datetime('now') WHERE id = ?",
@@ -153,6 +156,7 @@ class JobWorker:
                 (job_id,),
             )
             await db.commit()
+        logger.info("Job %d completed: all %d segments generated for read=%d", job_id, job["total"], read_id)
 
         await job_event_bus.emit(user_id, "job:completed", {
             "jobId": job_id, "readId": read_id,
@@ -167,6 +171,7 @@ class JobWorker:
 
         engine_url = engine_manager.get_engine_url()
         if not engine_url:
+            logger.error("Segment %d/%d: no engine URL available", seg_index, read_id)
             return False
 
         payload = {"text": text, "voice": voice}
@@ -174,6 +179,7 @@ class JobWorker:
             payload["language"] = language
 
         # 1. Generate audio via TTS engine
+        logger.info("Segment %d/%d: generating audio (voice=%s, %d chars)", seg_index, read_id, voice, len(text))
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
@@ -184,8 +190,9 @@ class JobWorker:
                 resp.raise_for_status()
                 audio_data = resp.content
         except Exception:
-            logger.exception(f"TTS generation failed for read {read_id} segment {seg_index}")
+            logger.exception("Segment %d/%d: TTS generation failed (engine=%s)", seg_index, read_id, engine_url)
             return False
+        logger.info("Segment %d/%d: got %d bytes of audio", seg_index, read_id, len(audio_data))
 
         # 2. Save WAV to disk
         audio_dir = config.AUDIO_DIR / str(read_id)
@@ -205,8 +212,9 @@ class JobWorker:
                 )
                 resp.raise_for_status()
                 word_timings = json.dumps(resp.json().get("words", []))
+                logger.debug("Segment %d/%d: alignment returned %d words", seg_index, read_id, len(resp.json().get("words", [])))
         except Exception:
-            logger.warning(f"Alignment failed for read {read_id} segment {seg_index}")
+            logger.debug("Segment %d/%d: alignment unavailable (this is ok)", seg_index, read_id)
 
         # 4. Update DB
         async with open_db() as db:

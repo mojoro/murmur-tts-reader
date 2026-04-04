@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -10,6 +11,7 @@ from orchestrator.models import VoiceResponse
 from orchestrator.engine_manager import engine_manager
 import orchestrator.config as config
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voices", tags=["voices"])
 
 
@@ -27,17 +29,23 @@ async def sync_voices(user_id: int = Depends(get_current_user_id), db: aiosqlite
     """Fetch voices from the active TTS engine and upsert into DB."""
     engine_url = engine_manager.get_engine_url()
     if not engine_url:
+        logger.warning("Voice sync failed: no engine running (user=%d)", user_id)
         raise HTTPException(status_code=503, detail="No TTS engine running")
 
+    logger.info("Syncing voices from engine at %s (user=%d)", engine_url, user_id)
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(f"{engine_url}/tts/voices", timeout=10)
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+            logger.error("Voice sync failed: cannot reach engine at %s: %s", engine_url, e)
             raise HTTPException(status_code=503, detail=f"Failed to reach TTS engine: {e}")
 
     data = resp.json()
-    for voice_name in data.get("builtin", []):
+    builtin = data.get("builtin", [])
+    custom = data.get("custom", [])
+    logger.info("Engine returned %d builtin, %d custom voices", len(builtin), len(custom))
+    for voice_name in builtin:
         existing = await db.execute_fetchall(
             "SELECT id FROM voices WHERE user_id IS NULL AND name = ?", (voice_name,)
         )
@@ -65,8 +73,10 @@ async def clone_voice(
     """Clone a voice by uploading a WAV file to the active TTS engine."""
     engine_url = engine_manager.get_engine_url()
     if not engine_url:
+        logger.warning("Voice clone failed: no engine running (user=%d, name=%s)", user_id, name)
         raise HTTPException(status_code=503, detail="No TTS engine running")
 
+    logger.info("Cloning voice name=%s from file=%s (user=%d)", name, file.filename, user_id)
     user_voices_dir = config.VOICES_DIR / str(user_id)
     user_voices_dir.mkdir(parents=True, exist_ok=True)
     wav_path = user_voices_dir / f"{name}.wav"
@@ -82,6 +92,7 @@ async def clone_voice(
             resp = await client.post(f"{engine_url}/tts/clone-voice", files=files, data=form_data, timeout=60)
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+            logger.error("Voice clone failed: engine error for name=%s: %s", name, e)
             wav_path.unlink(missing_ok=True)
             raise HTTPException(status_code=503, detail=f"Failed to clone voice: {e}")
 

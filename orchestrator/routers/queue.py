@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +10,7 @@ from orchestrator.db import get_db
 from orchestrator.job_events import job_event_bus
 from orchestrator.models import JobResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/queue", tags=["queue"])
 
 
@@ -38,6 +40,7 @@ async def cancel_job(
 
     job = dict(rows[0])
     if job["status"] in ("done", "failed", "cancelled"):
+        logger.warning("Cancel rejected: job=%d already in status=%s", job_id, job["status"])
         raise HTTPException(status_code=409, detail=f"Cannot cancel job with status: {job['status']}")
 
     await db.execute(
@@ -45,6 +48,7 @@ async def cancel_job(
         (job_id,),
     )
     await db.commit()
+    logger.info("Cancelled job id=%d for read=%d (user=%d)", job_id, job["read_id"], user_id)
 
     await job_event_bus.emit(user_id, "job:cancelled", {
         "jobId": job_id, "readId": job["read_id"],

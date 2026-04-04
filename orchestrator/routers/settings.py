@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends
 import aiosqlite
 
@@ -5,6 +7,7 @@ from orchestrator.db import get_db
 from orchestrator.auth import get_current_user_id
 from orchestrator.models import SettingsResponse, UpdateSettingsRequest
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 

@@ -85,6 +85,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 app.include_router(auth_router)
 app.include_router(reads_router)
 app.include_router(voices_router)

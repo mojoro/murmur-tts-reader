@@ -1,9 +1,12 @@
+import logging
 import shutil
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 
 import orchestrator.config as config
+
+logger = logging.getLogger(__name__)
 from orchestrator.auth import get_current_user_id
 from orchestrator.db import get_db
 from orchestrator.engine_manager import engine_manager
@@ -47,6 +50,7 @@ async def create_read(
     )
     read_id = cursor.lastrowid
     sentences = split_sentences(req.content)
+    logger.info("Created read id=%d title=%r type=%s segments=%d (user=%d)", read_id, req.title, req.type, len(sentences), user_id)
     for i, text in enumerate(sentences):
         await db.execute(
             "INSERT INTO audio_segments (read_id, segment_index, text) VALUES (?, ?, ?)",
@@ -108,6 +112,7 @@ async def delete_read(
     audio_dir = config.AUDIO_DIR / str(read_id)
     if audio_dir.exists():
         shutil.rmtree(audio_dir)
+    logger.info("Deleted read id=%d and audio dir (user=%d)", read_id, user_id)
 
 
 @router.post("/{read_id}/generate", response_model=JobResponse, status_code=201)
@@ -127,6 +132,7 @@ async def generate_audio(
     # Require a running engine
     active = engine_manager.active_engine
     if not active:
+        logger.warning("Generate failed: no engine running (user=%d, read=%d)", user_id, read_id)
         raise HTTPException(status_code=503, detail="No TTS engine running")
 
     # Reject if there's already a pending/running job for this read
@@ -135,6 +141,7 @@ async def generate_audio(
         (read_id,),
     )
     if existing:
+        logger.warning("Generate rejected: active job already exists for read=%d", read_id)
         raise HTTPException(status_code=409, detail="A job is already active for this read")
 
     # Count ungenerated segments
@@ -153,6 +160,7 @@ async def generate_audio(
     )
     job_id = cursor.lastrowid
     await db.commit()
+    logger.info("Created job id=%d for read=%d voice=%s engine=%s segments=%d (user=%d)", job_id, read_id, req.voice, active, total, user_id)
 
     # Queue position
     pos_rows = await db.execute_fetchall(
