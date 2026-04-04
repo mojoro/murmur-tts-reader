@@ -80,8 +80,17 @@ class EngineManager:
             return True
 
         logger.info(f"Starting engine: {name} from {engine_dir}")
+
+        # Use venv uvicorn directly if available (works in Docker where
+        # uv pip install was used), fall back to uv run for dev
+        venv_uvicorn = engine_dir / ".venv" / "bin" / "uvicorn"
+        if venv_uvicorn.exists():
+            cmd = [str(venv_uvicorn), "main:app"]
+        else:
+            cmd = ["uv", "run", "uvicorn", "main:app"]
+
         self._process = await asyncio.create_subprocess_exec(
-            "uv", "run", "uvicorn", "main:app",
+            *cmd,
             "--host", "0.0.0.0",
             "--port", str(config.ENGINE_PORT),
             cwd=str(engine_dir),
@@ -93,6 +102,14 @@ class EngineManager:
 
         healthy = await self._wait_for_healthy(timeout=120)
         if not healthy:
+            # Log subprocess output for debugging
+            if self._process:
+                stdout = await self._process.stdout.read() if self._process.stdout else b""
+                stderr = await self._process.stderr.read() if self._process.stderr else b""
+                if stdout:
+                    logger.error(f"Engine {name} stdout: {stdout.decode(errors='replace')[-2000:]}")
+                if stderr:
+                    logger.error(f"Engine {name} stderr: {stderr.decode(errors='replace')[-2000:]}")
             logger.error(f"Engine {name} failed to become healthy")
             await self.stop_engine()
             self._statuses[name] = EngineStatus.UNAVAILABLE
