@@ -3,6 +3,8 @@ import type { ReadSummary, ReadDetail } from '~/types/api'
 
 const SYNC_SETTING_KEY = 'murmur-auto-sync'
 const SYNC_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
+const BATCH_SIZE = 5 // audio fetches between pauses
+const BATCH_DELAY_MS = 500 // pause between batches to avoid saturating the network
 
 const lastSyncAt = ref<number>(0)
 const syncing = ref(false)
@@ -12,8 +14,8 @@ export function useBackgroundSync() {
 
   const autoSyncEnabled = ref(
     typeof localStorage !== 'undefined'
-      ? localStorage.getItem(SYNC_SETTING_KEY) !== 'false'
-      : true,
+      ? localStorage.getItem(SYNC_SETTING_KEY) === 'true'
+      : false,
   )
 
   function setAutoSync(enabled: boolean) {
@@ -32,7 +34,7 @@ export function useBackgroundSync() {
       const reads = await $fetch<ReadSummary[]>('/api/reads')
 
       for (const read of reads) {
-        if (!isOnline.value) break // stop if we went offline mid-sync
+        if (!isOnline.value) break
 
         // Fetch read detail (warms SW cache for /api/reads/:id)
         const detail = await $fetch<ReadDetail>(`/api/reads/${read.id}`)
@@ -40,12 +42,17 @@ export function useBackgroundSync() {
         // Fetch bookmarks (warms SW cache for /api/reads/:id/bookmarks)
         await $fetch(`/api/reads/${read.id}/bookmarks`)
 
-        // Fetch audio for generated segments (warms SW cache for /api/audio/...)
-        for (const seg of detail.segments) {
+        // Fetch audio in throttled batches to avoid saturating the network
+        const audioSegments = detail.segments.filter((s) => s.audio_generated)
+        for (let i = 0; i < audioSegments.length; i += BATCH_SIZE) {
           if (!isOnline.value) break
-          if (seg.audio_generated) {
-            // Use fetch() directly to avoid ofetch throwing on non-JSON
-            await fetch(`/api/audio/${seg.read_id}/${seg.segment_index}`)
+          const batch = audioSegments.slice(i, i + BATCH_SIZE)
+          await Promise.all(
+            batch.map((seg) => fetch(`/api/audio/${seg.read_id}/${seg.segment_index}`)),
+          )
+          // Pause between batches to let other requests through
+          if (i + BATCH_SIZE < audioSegments.length) {
+            await new Promise((r) => setTimeout(r, BATCH_DELAY_MS))
           }
         }
       }
@@ -68,8 +75,11 @@ export function useBackgroundSync() {
     if (typeof window === 'undefined') return
     stopPeriodicSync()
 
+    // Delay initial sync to let the page load first
     if (autoSyncEnabled.value && isOnline.value) {
-      syncAll()
+      setTimeout(() => {
+        if (autoSyncEnabled.value && isOnline.value) syncAll()
+      }, 10_000)
     }
 
     intervalId = setInterval(() => {
