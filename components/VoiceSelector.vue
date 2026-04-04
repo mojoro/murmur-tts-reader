@@ -19,9 +19,9 @@ const groupedVoices = computed(() => {
     .filter((v) => v.type === 'cloned')
     .map((v) => ({ label: v.name, value: v.name }))
 
-  const groups: { label: string; items: { label: string; value: string }[] }[] = []
-  if (builtin.length > 0) groups.push({ label: 'Built-in', items: builtin })
-  if (cloned.length > 0) groups.push({ label: 'Cloned', items: cloned })
+  const groups: Record<string, any>[][] = []
+  if (builtin.length > 0) groups.push([{ type: 'label', label: 'Built-in' }, ...builtin])
+  if (cloned.length > 0) groups.push([{ type: 'label', label: 'Cloned' }, ...cloned])
   return groups
 })
 
