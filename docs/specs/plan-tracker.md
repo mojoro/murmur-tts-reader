@@ -12,7 +12,7 @@
 | 4 | Nuxt BFF | DONE | merged | 5 (JWT) | Auth middleware (JWT cookie), auth routes (register/login/logout/me), catch-all proxy with X-User-Id, orchestrator fetch utility |
 | 5 | UI Migration | DONE | merged | build pass | Auth pages (login/register), auth middleware, all composables rewritten to BFF API, queue page, engine selector, SSR enabled, sql.js/drizzle removed |
 | 6 | Docker Compose | DONE | merged | 4 (alignment) | Dockerfiles (Nuxt, orchestrator, alignment), docker-compose.yml, .dockerignore, .env.example, CPU-only torch, configurable port |
-| 7 | PWA Offline Sync | TODO | — | — | Service worker sync, IndexedDB cache, conflict resolution |
+| 7 | PWA Offline Sync | DONE | merged | 16 | Workbox runtime caching, IndexedDB mutation queue, background sync, offline indicator, settings UI |
 
 ## Plan Details (for Plans 3-7)
 
