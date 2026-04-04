@@ -9,10 +9,14 @@ WORKDIR /app
 COPY orchestrator/pyproject.toml orchestrator/uv.lock orchestrator/
 RUN cd orchestrator && uv sync --frozen --no-dev --no-install-project
 
-# Install default TTS engine dependencies (CPU-only torch — pocket-tts is CPU-friendly)
-COPY pocket-tts-server/pyproject.toml pocket-tts-server/uv.lock pocket-tts-server/
-ENV UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
-RUN cd pocket-tts-server && uv sync --frozen --no-install-project
+# Install default TTS engine dependencies
+# CPU-only torch first (~200MB vs ~2.5GB CUDA), then remaining deps
+COPY pocket-tts-server/pyproject.toml pocket-tts-server/
+RUN cd pocket-tts-server && uv venv
+RUN cd pocket-tts-server && uv pip install --python .venv/bin/python \
+    torch --index-url https://download.pytorch.org/whl/cpu
+RUN cd pocket-tts-server && uv pip install --python .venv/bin/python \
+    fastapi "pocket-tts>=1.1.1" python-multipart uvicorn
 
 # Copy source code
 COPY orchestrator/ orchestrator/
