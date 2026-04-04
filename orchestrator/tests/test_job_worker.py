@@ -247,6 +247,38 @@ async def test_process_job_cancelled_mid_run(worker, event_bus):
     assert "job:cancelled" in event_types
 
 
+async def test_resume_waiting_jobs_when_engine_back(worker, em):
+    """waiting_for_backend jobs should be reset to pending when engine is available."""
+    await _seed_job()
+    # Simulate: job was set to waiting_for_backend
+    async with open_db() as db:
+        await db.execute("UPDATE jobs SET status = 'waiting_for_backend' WHERE id = 1")
+        await db.commit()
+
+    # Engine is available (em fixture has active engine)
+    await worker._resume_waiting_jobs()
+
+    async with open_db() as db:
+        rows = await db.execute_fetchall("SELECT status FROM jobs WHERE id = 1")
+        assert dict(rows[0])["status"] == "pending"
+
+
+async def test_resume_waiting_jobs_skipped_when_no_engine(worker, em):
+    """waiting_for_backend jobs should NOT be reset when engine is still down."""
+    await _seed_job()
+    async with open_db() as db:
+        await db.execute("UPDATE jobs SET status = 'waiting_for_backend' WHERE id = 1")
+        await db.commit()
+
+    em._active_engine = None  # engine down
+
+    await worker._resume_waiting_jobs()
+
+    async with open_db() as db:
+        rows = await db.execute_fetchall("SELECT status FROM jobs WHERE id = 1")
+        assert dict(rows[0])["status"] == "waiting_for_backend"
+
+
 async def test_process_job_engine_down(worker, em, event_bus):
     job_id, _ = await _seed_job()
     q = event_bus.subscribe(user_id=1)

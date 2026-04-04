@@ -33,6 +33,7 @@ class JobWorker:
     async def _loop(self):
         while True:
             try:
+                await self._resume_waiting_jobs()
                 job = await self._pick_next_job()
                 if job:
                     await self._process_job(job)
@@ -43,6 +44,15 @@ class JobWorker:
             except Exception:
                 logger.exception("Job worker loop error")
                 await asyncio.sleep(5)
+
+    async def _resume_waiting_jobs(self):
+        """Reset waiting_for_backend jobs to pending when engine is available."""
+        if engine_manager.get_engine_url():
+            async with open_db() as db:
+                await db.execute(
+                    "UPDATE jobs SET status = 'pending' WHERE status = 'waiting_for_backend'"
+                )
+                await db.commit()
 
     async def _pick_next_job(self) -> dict | None:
         async with open_db() as db:

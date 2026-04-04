@@ -32,15 +32,9 @@ async def reset_engine_manager(monkeypatch):
     monkeypatch.setattr("orchestrator.engine_manager.engine_manager", fresh)
     monkeypatch.setattr("orchestrator.routers.backends.engine_manager", fresh)
     monkeypatch.setattr("orchestrator.routers.reads.engine_manager", fresh)
+    monkeypatch.setattr("orchestrator.routers.health.engine_manager", fresh)
+    monkeypatch.setattr("orchestrator.routers.voices.engine_manager", fresh)
     monkeypatch.setattr("orchestrator.job_worker.engine_manager", fresh)
-    try:
-        monkeypatch.setattr("orchestrator.routers.health.engine_manager", fresh)
-    except AttributeError:
-        pass
-    try:
-        monkeypatch.setattr("orchestrator.routers.voices.engine_manager", fresh)
-    except AttributeError:
-        pass
     yield fresh
 
 
