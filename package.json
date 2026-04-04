@@ -7,12 +7,15 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@nuxt/ui": "^3.3.7",
     "drizzle-orm": "^0.45.1",
+    "jose": "^6.2.2",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "nuxt": "^3.21.2",
@@ -23,6 +26,7 @@
   },
   "devDependencies": {
     "@vite-pwa/nuxt": "^1.1.1",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "vitest": "^4.1.2"
   }
 }

@@ -3,6 +3,10 @@ export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@vite-pwa/nuxt'],
   compatibilityDate: '2025-03-23',
   ssr: false,
+  runtimeConfig: {
+    orchestratorUrl: 'http://localhost:8000',
+    jwtSecret: 'dev-secret-change-in-production',
+  },
   css: ['./app.css'],
   devServer: {
     port: 4000
@@ -16,6 +20,8 @@ export default defineNuxtConfig({
           '**/f5tts-server/**',
           '**/gptsovits-server/**',
           '**/cosyvoice-server/**',
+          '**/orchestrator/**',
+          '**/data/**',
         ],
       },
     },
