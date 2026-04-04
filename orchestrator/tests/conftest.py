@@ -8,6 +8,7 @@ from orchestrator.main import app
 from orchestrator.config import DB_PATH, DATA_DIR
 from orchestrator.db import init_db
 from orchestrator.engine_manager import EngineManager, EngineStatus
+from orchestrator.job_events import JobEventBus
 
 @pytest_asyncio.fixture
 async def client(tmp_path, monkeypatch):
@@ -37,4 +38,34 @@ async def reset_engine_manager(monkeypatch):
         monkeypatch.setattr("orchestrator.routers.voices.engine_manager", fresh)
     except AttributeError:
         pass  # voices router doesn't import engine_manager yet (added in Task 5)
+    yield fresh
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_job_event_bus(monkeypatch):
+    """Reset job event bus state between tests."""
+    fresh = JobEventBus()
+    monkeypatch.setattr("orchestrator.job_events.job_event_bus", fresh)
+
+    # Patch in routers if they import job_event_bus (will be added in Task 4)
+    try:
+        import orchestrator.routers.reads
+        monkeypatch.setattr("orchestrator.routers.reads.job_event_bus", fresh)
+    except (ImportError, AttributeError):
+        pass
+
+    # Queue router will be created in Task 4
+    try:
+        import orchestrator.routers.queue
+        monkeypatch.setattr("orchestrator.routers.queue.job_event_bus", fresh)
+    except (ImportError, AttributeError):
+        pass
+
+    # Job worker will be created in Task 5
+    try:
+        import orchestrator.job_worker
+        monkeypatch.setattr("orchestrator.job_worker.job_event_bus", fresh)
+    except (ImportError, AttributeError):
+        pass
+
     yield fresh
