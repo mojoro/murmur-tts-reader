@@ -9,7 +9,7 @@
 | 1 | Orchestrator Foundation | DONE | merged | 28 | FastAPI app, SQLite schema, auth (JWT+bcrypt), reads CRUD, bookmarks, voices, settings, health, sentence splitter |
 | 2 | Engine Management | DONE | merged | 45 total | Engine registry, subprocess lifecycle manager, backends router (list/select/SSE), voice sync/clone, health integration |
 | 3 | Job Queue | DONE | merged | 74 total | Background job worker, SSE progress events, generate endpoint, queue router (list/cancel/SSE), startup recovery, auto-resume |
-| 4 | Nuxt BFF | TODO | — | — | Server routes proxying to orchestrator, JWT cookie auth middleware, SSE relay |
+| 4 | Nuxt BFF | DONE | merged | 5 (JWT) | Auth middleware (JWT cookie), auth routes (register/login/logout/me), catch-all proxy with X-User-Id, orchestrator fetch utility |
 | 5 | UI Migration | TODO | — | — | Auth pages, refactor composables to use BFF, queue page, engine selector UI |
 | 6 | Docker Compose | TODO | — | — | Dockerfiles for Nuxt + orchestrator + alignment, compose file, volume config |
 | 7 | PWA Offline Sync | TODO | — | — | Service worker sync, IndexedDB cache, conflict resolution |
