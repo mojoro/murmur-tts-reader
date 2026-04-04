@@ -155,7 +155,6 @@ async function handleFetchUrl() {
   fetchError.value = ''
   content.value = ''
   title.value = ''
-
   try {
     const article = await extractArticle(url.value.trim())
     title.value = article.title
@@ -184,7 +183,6 @@ async function processFile(file: File) {
   fetchError.value = ''
   content.value = ''
   title.value = ''
-
   try {
     const parsed = await parseDocument(file)
     title.value = parsed.title
@@ -203,11 +201,15 @@ async function handleCreate() {
     const readTitle = title.value.trim() || content.value.slice(0, 50).trim() + '...'
     const typeMap = { text: 'text', url: 'url', file: 'file' } as const
     const type = typeMap[activeMode.value as keyof typeof typeMap] ?? 'text'
-    const sourceUrl = activeMode.value === 'url' ? url.value.trim() : undefined
-    const fileName = activeMode.value === 'file' ? selectedFile.value?.name : undefined
-    const id = await createRead(readTitle, content.value.trim(), type, sourceUrl, fileName)
+    const result = await createRead({
+      title: readTitle,
+      content: content.value.trim(),
+      type,
+      source_url: activeMode.value === 'url' ? url.value.trim() : undefined,
+      file_name: activeMode.value === 'file' ? selectedFile.value?.name : undefined,
+    })
     toast.add({ title: 'Read created', color: 'success' })
-    await navigateTo(`/read/${id}`)
+    await navigateTo(`/read/${result.id}`)
   } catch (e: any) {
     toast.add({ title: 'Failed to create read', description: e.message, color: 'error' })
   } finally {

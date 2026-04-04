@@ -1,26 +1,14 @@
 <template>
   <div class="flex flex-col gap-4">
-    <!-- Search and sort bar -->
     <div class="flex items-center gap-3">
-      <UInput
-        v-model="search"
-        icon="i-lucide-search"
-        placeholder="Search reads..."
-        class="flex-1"
-      />
-      <USelectMenu
-        v-model="sortBy"
-        :items="sortOptions"
-        class="w-40"
-      />
+      <UInput v-model="search" icon="i-lucide-search" placeholder="Search reads..." class="flex-1" />
+      <USelectMenu v-model="sortBy" :items="sortOptions" class="w-40" />
     </div>
 
-    <!-- Loading state -->
     <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <USkeleton v-for="i in 6" :key="i" class="h-32 w-full rounded-lg" />
     </div>
 
-    <!-- Empty state -->
     <div
       v-else-if="filteredReads.length === 0 && !search"
       class="flex flex-col items-center justify-center py-16 gap-4 text-neutral-500"
@@ -31,7 +19,6 @@
       <UButton color="primary" to="/new">Create a Read</UButton>
     </div>
 
-    <!-- No search results -->
     <div
       v-else-if="filteredReads.length === 0 && search"
       class="flex flex-col items-center justify-center py-16 gap-4 text-neutral-500"
@@ -41,17 +28,10 @@
       <p class="text-sm">Try a different search term</p>
     </div>
 
-    <!-- Card grid -->
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <LibraryCard
-        v-for="read in filteredReads"
-        :key="read.id"
-        :read="read"
-        @delete="confirmDelete"
-      />
+      <LibraryCard v-for="read in filteredReads" :key="read.id" :read="read" @delete="confirmDelete" />
     </div>
 
-    <!-- Delete confirmation modal -->
     <UModal v-model:open="deleteModalOpen">
       <template #content>
         <div class="p-6 flex flex-col gap-4">
@@ -68,10 +48,10 @@
 </template>
 
 <script setup lang="ts">
-import type { Read } from '~/types/db'
+import type { ReadSummary } from '~/types/api'
 
 const props = defineProps<{
-  reads: Read[]
+  reads: ReadSummary[]
   loading: boolean
 }>()
 
@@ -95,23 +75,16 @@ const filteredReads = computed(() => {
 
   if (search.value) {
     const q = search.value.toLowerCase()
-    result = result.filter(
-      (r) => r.title.toLowerCase().includes(q) || r.content.toLowerCase().includes(q),
-    )
+    result = result.filter((r) => r.title.toLowerCase().includes(q))
   }
 
   switch (sortBy.value) {
     case 'oldest':
-      result.sort((a, b) => {
-        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : a.createdAt
-        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : b.createdAt
-        return aTime - bTime
-      })
+      result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       break
     case 'az':
       result.sort((a, b) => a.title.localeCompare(b.title))
       break
-    // 'newest' is default order from DB (desc createdAt)
   }
 
   return result

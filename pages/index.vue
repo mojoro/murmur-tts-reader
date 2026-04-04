@@ -6,21 +6,12 @@
         New Read
       </UButton>
     </div>
-
-    <LibraryGrid
-      :reads="reads"
-      :loading="loading"
-      @delete="handleDelete"
-    />
+    <LibraryGrid :reads="reads" :loading="loading" @delete="handleDelete" />
   </div>
 </template>
 
 <script setup lang="ts">
-const { reads, loading, fetchReads, deleteRead } = useLibrary()
-
-onMounted(() => {
-  fetchReads()
-})
+const { reads, loading, deleteRead } = useLibrary()
 
 async function handleDelete(id: number) {
   await deleteRead(id)
