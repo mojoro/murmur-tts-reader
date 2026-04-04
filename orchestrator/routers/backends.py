@@ -48,6 +48,21 @@ async def select_backend(req: SelectBackendRequest):
     )
 
 
+@router.post("/install")
+async def install_backend(req: SelectBackendRequest):
+    if req.name not in ENGINES:
+        raise HTTPException(status_code=404, detail=f"Unknown engine: {req.name}")
+
+    status = engine_manager.get_status(req.name)
+    if status.value in ("installed", "running", "stopped"):
+        return {"message": f"Engine {req.name} is already installed"}
+
+    raise HTTPException(
+        status_code=501,
+        detail=f"Remote engine installation not yet supported. Mount the engine directory into the container.",
+    )
+
+
 @router.get("/events")
 async def backend_events():
     q = engine_manager.subscribe()
