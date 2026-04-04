@@ -31,11 +31,18 @@ __pycache__/
 uv.lock
 !orchestrator/uv.lock
 !pocket-tts-server/uv.lock
-!alignment-server/uv.lock
 
 # SQLite
 pocket-tts.db
 pocket-tts.db-*
+*.db
+
+# Runtime data
+data/
+orchestrator/data/
+
+# Python build metadata
+*.egg-info/
 
 # Claude Code
 .claude/
