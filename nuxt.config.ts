@@ -2,7 +2,7 @@
 export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@vite-pwa/nuxt'],
   compatibilityDate: '2025-03-23',
-  ssr: false,
+  ssr: true,
   runtimeConfig: {
     orchestratorUrl: 'http://localhost:8000',
     jwtSecret: 'dev-secret-change-in-production',
