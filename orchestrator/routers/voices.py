@@ -37,9 +37,13 @@ async def sync_voices(user_id: int = Depends(get_current_user_id), db: aiosqlite
         try:
             resp = await client.get(f"{engine_url}/tts/voices", timeout=10)
             resp.raise_for_status()
-        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
-            logger.error("Voice sync failed: cannot reach engine at %s: %s", engine_url, e)
-            raise HTTPException(status_code=503, detail=f"Failed to reach TTS engine: {e}")
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:500] if e.response else ""
+            logger.error("Voice sync failed: engine returned %d: %s", e.response.status_code, body)
+            raise HTTPException(status_code=503, detail=f"TTS engine error: {body or e}")
+        except httpx.ConnectError as e:
+            logger.error("Voice sync failed: cannot connect to engine at %s: %s", engine_url, e)
+            raise HTTPException(status_code=503, detail=f"Cannot reach TTS engine: {e}")
 
     data = resp.json()
     builtin = data.get("builtin", [])
@@ -91,10 +95,15 @@ async def clone_voice(
         try:
             resp = await client.post(f"{engine_url}/tts/clone-voice", files=files, data=form_data, timeout=60)
             resp.raise_for_status()
-        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
-            logger.error("Voice clone failed: engine error for name=%s: %s", name, e)
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:500] if e.response else ""
+            logger.error("Voice clone failed: engine returned %d for name=%s: %s", e.response.status_code, name, body)
             wav_path.unlink(missing_ok=True)
-            raise HTTPException(status_code=503, detail=f"Failed to clone voice: {e}")
+            raise HTTPException(status_code=503, detail=f"TTS engine error: {body or e}")
+        except httpx.ConnectError as e:
+            logger.error("Voice clone failed: cannot connect to engine for name=%s: %s", name, e)
+            wav_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=503, detail=f"Cannot reach TTS engine: {e}")
 
     cursor = await db.execute(
         "INSERT INTO voices (user_id, name, type, wav_path) VALUES (?, ?, 'cloned', ?)",

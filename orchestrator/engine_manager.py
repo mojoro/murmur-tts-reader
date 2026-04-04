@@ -97,23 +97,13 @@ class EngineManager:
             "--host", "0.0.0.0",
             "--port", str(config.ENGINE_PORT),
             cwd=str(engine_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
         )
         self._active_engine = name
         self._statuses[name] = EngineStatus.RUNNING
 
         healthy = await self._wait_for_healthy(timeout=120)
         if not healthy:
-            # Log subprocess output for debugging
-            if self._process:
-                stdout = await self._process.stdout.read() if self._process.stdout else b""
-                stderr = await self._process.stderr.read() if self._process.stderr else b""
-                if stdout:
-                    logger.error(f"Engine {name} stdout: {stdout.decode(errors='replace')[-2000:]}")
-                if stderr:
-                    logger.error(f"Engine {name} stderr: {stderr.decode(errors='replace')[-2000:]}")
-            logger.error(f"Engine {name} failed to become healthy")
+            logger.error("Engine %s failed to become healthy within 120s (check engine output above)", name)
             await self.stop_engine()
             self._statuses[name] = EngineStatus.UNAVAILABLE
             await self._emit_event("backend:status", {"name": name, "status": "unavailable"})
