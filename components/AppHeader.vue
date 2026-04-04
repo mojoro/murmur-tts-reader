@@ -13,6 +13,9 @@
 
     <div class="flex-1" />
 
+    <!-- Offline indicator -->
+    <OfflineIndicator class="mr-3" />
+
     <!-- Health indicator -->
     <div class="flex items-center gap-2 mr-3">
       <span
