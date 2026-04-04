@@ -12,6 +12,17 @@ data/
 orchestrator/data/
 *.egg-info
 
+# TTS engine model/cache dirs (multi-GB, download at runtime)
+xtts-server/models/
+xtts-server/voices/
+f5tts-server/models/
+f5tts-server/voices/
+gptsovits-server/pretrained_models/
+gptsovits-server/voices/
+cosyvoice-server/models/
+cosyvoice-server/repo/
+cosyvoice-server/voices/
+
 # Dev/docs
 docs/
 *.md

@@ -21,10 +21,12 @@ RUN cd pocket-tts-server && uv pip install --python .venv/bin/python \
 # Copy source code
 COPY orchestrator/ orchestrator/
 COPY pocket-tts-server/ pocket-tts-server/
-COPY xtts-server/ xtts-server/
-COPY f5tts-server/ f5tts-server/
-COPY gptsovits-server/ gptsovits-server/
-COPY cosyvoice-server/ cosyvoice-server/
+
+# Copy only lightweight source for optional engines (models download at runtime)
+COPY xtts-server/main.py xtts-server/pyproject.toml xtts-server/
+COPY f5tts-server/main.py f5tts-server/pyproject.toml f5tts-server/
+COPY gptsovits-server/main.py gptsovits-server/pyproject.toml gptsovits-server/
+COPY cosyvoice-server/main.py cosyvoice-server/pyproject.toml cosyvoice-server/
 
 ENV MURMUR_DATA_DIR=/app/data
 
