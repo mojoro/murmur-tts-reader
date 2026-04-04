@@ -1,0 +1,40 @@
+# docker-compose.yml
+services:
+  app:
+    build: .
+    ports:
+      - "80:3000"
+    environment:
+      - NUXT_ORCHESTRATOR_URL=http://orchestrator:8000
+      - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+    depends_on:
+      orchestrator:
+        condition: service_started
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    volumes:
+      - murmur-data:/app/data
+    environment:
+      - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+      - MURMUR_ALIGN_URL=http://align:8001
+      - MURMUR_DATA_DIR=/app/data
+    depends_on:
+      align:
+        condition: service_started
+        required: false
+
+  align:
+    build:
+      context: .
+      dockerfile: alignment-server/Dockerfile
+    profiles:
+      - full
+    volumes:
+      - murmur-align-cache:/app/cache
+
+volumes:
+  murmur-data:
+  murmur-align-cache:
