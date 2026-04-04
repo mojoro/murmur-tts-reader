@@ -5,5 +5,8 @@ export async function verifyToken(token: string, secret: string): Promise<number
   const { payload } = await jwtVerify(token, secretKey, {
     algorithms: ['HS256'],
   })
-  return parseInt(payload.sub as string, 10)
+  if (!payload.sub) {
+    throw new Error('Token missing sub claim')
+  }
+  return parseInt(payload.sub, 10)
 }

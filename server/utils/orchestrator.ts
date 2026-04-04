@@ -13,7 +13,7 @@ export async function orchestratorFetch<T>(
   const config = useRuntimeConfig(event)
   const headers: Record<string, string> = {}
 
-  if (options.userId) {
+  if (options.userId != null) {
     headers['X-User-Id'] = String(options.userId)
   }
 
