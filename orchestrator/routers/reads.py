@@ -6,8 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 import orchestrator.config as config
 from orchestrator.auth import get_current_user_id
 from orchestrator.db import get_db
+from orchestrator.engine_manager import engine_manager
+from orchestrator.job_events import job_event_bus
 from orchestrator.models import (
     CreateReadRequest,
+    GenerateRequest,
+    JobResponse,
     ReadDetail,
     ReadSummary,
     SegmentResponse,
@@ -104,6 +108,66 @@ async def delete_read(
     audio_dir = config.AUDIO_DIR / str(read_id)
     if audio_dir.exists():
         shutil.rmtree(audio_dir)
+
+
+@router.post("/{read_id}/generate", response_model=JobResponse, status_code=201)
+async def generate_audio(
+    read_id: int,
+    req: GenerateRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    # Verify read exists and belongs to user
+    read_rows = await db.execute_fetchall(
+        "SELECT id FROM reads WHERE id = ? AND user_id = ?", (read_id, user_id)
+    )
+    if not read_rows:
+        raise HTTPException(status_code=404, detail="Read not found")
+
+    # Require a running engine
+    active = engine_manager.active_engine
+    if not active:
+        raise HTTPException(status_code=503, detail="No TTS engine running")
+
+    # Reject if there's already a pending/running job for this read
+    existing = await db.execute_fetchall(
+        "SELECT id FROM jobs WHERE read_id = ? AND status IN ('pending', 'running', 'waiting_for_backend')",
+        (read_id,),
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="A job is already active for this read")
+
+    # Count ungenerated segments
+    seg_rows = await db.execute_fetchall(
+        "SELECT COUNT(*) as cnt FROM audio_segments WHERE read_id = ? AND audio_generated = 0",
+        (read_id,),
+    )
+    total = dict(seg_rows[0])["cnt"]
+    if total == 0:
+        raise HTTPException(status_code=400, detail="All segments already generated")
+
+    # Create job
+    cursor = await db.execute(
+        "INSERT INTO jobs (user_id, read_id, voice, engine, language, total) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, read_id, req.voice, active, req.language, total),
+    )
+    job_id = cursor.lastrowid
+    await db.commit()
+
+    # Queue position
+    pos_rows = await db.execute_fetchall(
+        "SELECT COUNT(*) as cnt FROM jobs WHERE user_id = ? AND status IN ('pending', 'running')",
+        (user_id,),
+    )
+    position = dict(pos_rows[0])["cnt"]
+
+    # Emit event
+    await job_event_bus.emit(user_id, "job:queued", {
+        "jobId": job_id, "readId": read_id, "position": position, "total": total,
+    })
+
+    row = await db.execute_fetchall("SELECT * FROM jobs WHERE id = ?", (job_id,))
+    return JobResponse(**dict(row[0]))
 
 
 async def _get_read_detail(

@@ -30,6 +30,7 @@ async def reset_engine_manager(monkeypatch):
     fresh = EngineManager()
     monkeypatch.setattr("orchestrator.engine_manager.engine_manager", fresh)
     monkeypatch.setattr("orchestrator.routers.backends.engine_manager", fresh)
+    monkeypatch.setattr("orchestrator.routers.reads.engine_manager", fresh)
     try:
         monkeypatch.setattr("orchestrator.routers.health.engine_manager", fresh)
     except AttributeError:
