@@ -1,6 +1,6 @@
 // composables/useOffline.ts
-import { ref, readonly, watch } from 'vue'
-import { getAllMutations, removeMutation, clearMutations } from '~/utils/offline-queue'
+import { ref, readonly } from 'vue'
+import { getAllMutations, removeMutation } from '~/utils/offline-queue'
 import type { OfflineMutation } from '~/types/api'
 
 const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
