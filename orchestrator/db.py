@@ -1,4 +1,5 @@
 import aiosqlite
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import orchestrator.config as config
@@ -17,6 +18,18 @@ async def init_db():
 
 
 async def get_db():
+    db = await aiosqlite.connect(config.DB_PATH)
+    db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield db
+    finally:
+        await db.close()
+
+
+@asynccontextmanager
+async def open_db():
+    """Context manager for non-request code (background workers)."""
     db = await aiosqlite.connect(config.DB_PATH)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys=ON")
