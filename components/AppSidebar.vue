@@ -1,10 +1,22 @@
 <template>
-  <nav class="flex-1 overflow-y-auto p-3">
+  <nav class="flex flex-col flex-1 overflow-y-auto p-3">
     <UNavigationMenu
       :items="items"
       orientation="vertical"
       class="w-full"
     />
+    <div class="mt-auto pt-3 border-t border-neutral-200 dark:border-neutral-800">
+      <UButton
+        icon="i-lucide-log-out"
+        variant="ghost"
+        color="neutral"
+        block
+        class="justify-start"
+        @click="handleLogout"
+      >
+        Sign Out
+      </UButton>
+    </div>
   </nav>
 </template>
 
@@ -14,6 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const { logout } = useAuth()
 
 const items = computed(() => [
   {
@@ -38,6 +51,13 @@ const items = computed(() => [
     click: () => emit('navigate'),
   },
   {
+    label: 'Queue',
+    icon: 'i-lucide-list',
+    to: '/queue',
+    active: route.path === '/queue',
+    click: () => emit('navigate'),
+  },
+  {
     label: 'Settings',
     icon: 'i-lucide-settings',
     to: '/settings',
@@ -45,4 +65,9 @@ const items = computed(() => [
     click: () => emit('navigate'),
   },
 ])
+
+async function handleLogout() {
+  emit('navigate')
+  await logout()
+}
 </script>
