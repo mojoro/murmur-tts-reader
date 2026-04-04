@@ -3,7 +3,7 @@
     <UCard class="w-full max-w-sm">
       <div class="flex flex-col gap-6">
         <div class="text-center">
-          <h1 class="text-2xl font-bold text-neutral-900 dark:text-neutral-50">pocket-tts</h1>
+          <h1 class="text-2xl font-bold text-neutral-900 dark:text-neutral-50">Murmur</h1>
           <p class="text-sm text-neutral-500 mt-1">Sign in to your account</p>
         </div>
 

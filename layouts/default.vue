@@ -4,7 +4,7 @@
     <aside class="hidden lg:flex lg:w-64 lg:flex-col border-r border-neutral-200 dark:border-neutral-800">
       <div class="flex items-center h-14 px-4 border-b border-neutral-200 dark:border-neutral-800">
         <NuxtLink to="/" class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-          pocket-tts
+          Murmur
         </NuxtLink>
       </div>
       <AppSidebar />
@@ -15,7 +15,7 @@
       <template #content>
         <div class="flex flex-col h-full">
           <div class="flex items-center h-14 px-4 border-b border-neutral-200 dark:border-neutral-800">
-            <span class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">pocket-tts</span>
+            <span class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">Murmur</span>
           </div>
           <AppSidebar @navigate="sidebarOpen = false" />
         </div>

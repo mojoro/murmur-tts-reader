@@ -1,4 +1,4 @@
-# pocket-tts
+# Murmur
 
 Open-source, offline alternative to ElevenReader. Paste text, select a voice, and it synthesizes audio using local TTS — no API keys, no cloud. Voice cloning supported.
 

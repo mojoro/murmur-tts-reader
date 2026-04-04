@@ -1,6 +1,6 @@
 import type { AudioSegment } from '~/types/api'
 
-const RATE_STORAGE_KEY = 'pocket-tts-playback-rate'
+const RATE_STORAGE_KEY = 'murmur-playback-rate'
 
 function loadRate(): number {
   if (!import.meta.client) return 1.0

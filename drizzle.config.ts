@@ -5,6 +5,6 @@ export default defineConfig({
   out: './server/db/migrations',
   dialect: 'sqlite',
   dbCredentials: {
-    url: './pocket-tts.db',
+    url: './murmur.db',
   },
 })

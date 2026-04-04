@@ -8,7 +8,7 @@
       @click="emit('toggleSidebar')"
     />
     <NuxtLink to="/" class="lg:hidden text-lg font-semibold text-neutral-900 dark:text-neutral-50">
-      pocket-tts
+      Murmur
     </NuxtLink>
 
     <div class="flex-1" />
