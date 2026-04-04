@@ -9,11 +9,11 @@
     <div class="flex items-start justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-neutral-900 dark:text-neutral-50">
-          {{ readData.read.title }}
+          {{ readData.title }}
         </h1>
         <div class="flex items-center gap-2 mt-1">
           <UBadge :color="typeColor" variant="subtle" size="sm">
-            {{ readData.read.type }}
+            {{ readData.type }}
           </UBadge>
           <span class="text-xs text-neutral-400">
             {{ readData.segments.length }} segments
@@ -26,7 +26,7 @@
           variant="ghost"
           color="neutral"
           :loading="exporting"
-          :disabled="!readData?.segments.some(s => s.audioPath)"
+          :disabled="!readData?.segments.some(s => s.audio_generated)"
           @click="handleExport"
         />
         <UButton
@@ -60,7 +60,7 @@
           variant="outline"
           icon="i-lucide-square"
           size="sm"
-          @click="abort"
+          @click="cancel"
         >
           Stop
         </UButton>
@@ -69,9 +69,9 @@
 
     <!-- Error alert -->
     <UAlert
-      v-if="ttsError"
+      v-if="genError"
       color="error"
-      :title="ttsError"
+      :title="genError"
       icon="i-lucide-alert-circle"
     />
 
@@ -96,51 +96,80 @@
     <!-- Reader view -->
     <ReaderView :segments="readData.segments" />
 
-    <!-- Audio player (fixed bottom bar, only renders when segments loaded) -->
+    <!-- Audio player -->
     <AudioPlayer />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { Read, AudioSegment } from '~/types/db'
+import type { ReadDetail } from '~/types/api'
 
 const route = useRoute()
 const id = computed(() => Number(route.params.id))
 
-const { getRead, updateRead } = useLibrary()
+// Read data
+const { data: readData, refresh: refreshRead } = useFetch<ReadDetail>(
+  () => `/api/reads/${id.value}`,
+)
+
+// Voices
 const { selectedVoice } = useVoices()
-const { generating, progress, total, error: ttsError, generate, abort } = useTTS()
+
+// Generation
+const { generating, progress, total, error: genError, generate, cancel } = useGeneration(id)
+
+// Audio player
 const { setSegments, currentSegmentIndex } = useAudioPlayer()
 
-const readIdRef = computed(() => id.value)
-const { bookmarks: bookmarkList, fetchBookmarks, addBookmark, deleteBookmark } = useBookmarks(readIdRef)
+// Bookmarks
+const { bookmarks: bookmarkList, addBookmark, deleteBookmark } = useBookmarks(id)
 const bookmarkModalOpen = ref(false)
 const bookmarkSegmentIndex = ref(0)
 
-const readData = ref<{ read: Read; segments: AudioSegment[] } | null>(null)
 const exporting = ref(false)
 const initialLoadDone = ref(false)
+
+// Set segments for audio player when read data loads
+watch(readData, (data) => {
+  if (data) {
+    const initialSegment = !initialLoadDone.value ? data.progress_segment ?? 0 : undefined
+    setSegments(data.segments, initialSegment)
+    initialLoadDone.value = true
+  }
+}, { immediate: true })
+
+// Refresh read data when generation completes (to get updated segments with audio)
+watch(generating, async (isGenerating, wasGenerating) => {
+  if (wasGenerating && !isGenerating) {
+    await refreshRead()
+  }
+})
+
+async function handleGenerate() {
+  if (!readData.value || !selectedVoice.value) return
+  await generate(selectedVoice.value)
+}
 
 async function handleExport() {
   if (!readData.value) return
   exporting.value = true
   try {
-    const { loadAudio } = useAudioStorage()
-    const segsWithAudio = readData.value.segments.filter((s) => s.audioPath)
+    const segsWithAudio = readData.value.segments.filter((s) => s.audio_generated)
     if (segsWithAudio.length === 0) return
 
     const blobs: Blob[] = []
     for (const seg of segsWithAudio) {
-      const [readId, segIdx] = seg.audioPath!.split(':').map(Number)
-      const blob = await loadAudio(readId, segIdx)
-      if (blob) blobs.push(blob)
+      const blob = await $fetch<Blob>(`/api/audio/${seg.read_id}/${seg.segment_index}`, {
+        responseType: 'blob',
+      })
+      blobs.push(blob)
     }
 
     const combined = await concatWavBlobs(blobs)
     const url = URL.createObjectURL(combined)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${readData.value.read.title.replace(/[^a-zA-Z0-9]/g, '_')}.wav`
+    a.download = `${readData.value.title.replace(/[^a-zA-Z0-9]/g, '_')}.wav`
     a.click()
     URL.revokeObjectURL(url)
   } finally {
@@ -148,25 +177,8 @@ async function handleExport() {
   }
 }
 
-async function loadRead() {
-  readData.value = await getRead(id.value)
-  if (readData.value) {
-    const initialSegment = !initialLoadDone.value ? readData.value.read.progressSegment ?? 0 : undefined
-    setSegments(readData.value.segments, initialSegment)
-    initialLoadDone.value = true
-  }
-  await fetchBookmarks()
-}
-
-async function handleGenerate() {
-  if (!readData.value || !selectedVoice.value) return
-  await generate(id.value, readData.value.segments, selectedVoice.value)
-  // Reload to get updated segments with audio paths
-  await loadRead()
-}
-
 function openBookmarkModal() {
-  bookmarkSegmentIndex.value = useAudioPlayer().currentSegmentIndex.value
+  bookmarkSegmentIndex.value = currentSegmentIndex.value
   bookmarkModalOpen.value = true
 }
 
@@ -174,19 +186,18 @@ async function handleAddBookmark(segmentIndex: number, note?: string) {
   await addBookmark(segmentIndex, 0, note)
 }
 
-onMounted(() => {
-  loadRead()
-})
-
 // Save playback position when segment changes
 watch(currentSegmentIndex, (newIndex) => {
   if (initialLoadDone.value && readData.value) {
-    updateRead(id.value, { progressSegment: newIndex })
+    $fetch(`/api/reads/${id.value}`, {
+      method: 'PATCH',
+      body: { progress_segment: newIndex },
+    })
   }
 })
 
 const typeColor = computed(() => {
-  switch (readData.value?.read.type) {
+  switch (readData.value?.type) {
     case 'url': return 'info' as const
     case 'file': return 'warning' as const
     default: return 'neutral' as const
