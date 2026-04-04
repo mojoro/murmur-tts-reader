@@ -103,6 +103,7 @@
 
 <script setup lang="ts">
 import type { ReadDetail } from '~/types/api'
+import { queueMutation } from '~/utils/offline-queue'
 
 const route = useRoute()
 const id = computed(() => Number(route.params.id))
@@ -125,6 +126,8 @@ const { setSegments, currentSegmentIndex } = useAudioPlayer()
 const { bookmarks: bookmarkList, addBookmark, deleteBookmark } = useBookmarks(id)
 const bookmarkModalOpen = ref(false)
 const bookmarkSegmentIndex = ref(0)
+
+const { isOnline } = useOffline()
 
 const exporting = ref(false)
 const initialLoadDone = ref(false)
@@ -188,11 +191,15 @@ async function handleAddBookmark(segmentIndex: number, note?: string) {
 
 // Save playback position when segment changes
 watch(currentSegmentIndex, (newIndex) => {
-  if (initialLoadDone.value && readData.value) {
-    $fetch(`/api/reads/${id.value}`, {
-      method: 'PATCH',
-      body: { progress_segment: newIndex },
-    })
+  if (!initialLoadDone.value || !readData.value) return
+
+  const url = `/api/reads/${id.value}`
+  const body = { progress_segment: newIndex }
+
+  if (isOnline.value) {
+    $fetch(url, { method: 'PATCH', body })
+  } else {
+    queueMutation({ url, method: 'PATCH', body })
   }
 })
 
