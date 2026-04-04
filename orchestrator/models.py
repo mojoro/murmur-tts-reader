@@ -127,3 +127,24 @@ class BackendResponse(BaseModel):
 
 class SelectBackendRequest(BaseModel):
     name: str
+
+
+# --- Jobs ---
+class GenerateRequest(BaseModel):
+    voice: str
+    language: str | None = None
+
+class JobResponse(BaseModel):
+    id: int
+    user_id: int
+    read_id: int
+    voice: str
+    engine: str
+    language: str | None
+    status: str
+    progress: int
+    total: int
+    error: str | None
+    created_at: str
+    started_at: str | None
+    completed_at: str | None

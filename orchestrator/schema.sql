@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     read_id INTEGER NOT NULL REFERENCES reads(id) ON DELETE CASCADE,
     voice TEXT NOT NULL,
     engine TEXT NOT NULL,
+    language TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     progress INTEGER NOT NULL DEFAULT 0,
     total INTEGER NOT NULL DEFAULT 0,
