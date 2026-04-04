@@ -15,6 +15,7 @@ from orchestrator.routers.settings import router as settings_router
 from orchestrator.routers.bookmarks import router as bookmarks_router
 from orchestrator.routers.health import router as health_router
 from orchestrator.routers.backends import router as backends_router
+from orchestrator.routers.queue import router as queue_router
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ app.include_router(settings_router)
 app.include_router(bookmarks_router)
 app.include_router(health_router)
 app.include_router(backends_router)
+app.include_router(queue_router)
 
 
 @app.get("/audio/{read_id}/{segment_index}")
