@@ -21,6 +21,7 @@ services:
       - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
       - MURMUR_ALIGN_URL=http://align:8001
       - MURMUR_DATA_DIR=/app/data
+      - HF_TOKEN=${HF_TOKEN:-}
     depends_on:
       align:
         condition: service_started
