@@ -1,61 +1,43 @@
-import { eq } from 'drizzle-orm'
-import { voices } from '~/shared/schema'
-import type { Voice } from '~/types/db'
-import type { VoicesResponse } from '~/types/tts'
-
-const voiceList = ref<Voice[]>([])
-const selectedVoice = ref<string>('')
-const pending = ref(false)
+import type { Voice } from '~/types/api'
 
 export function useVoices() {
-  const { getDb, persist } = useDatabase()
-  const { settings } = useSettings()
+  const { data: voices, status, refresh } = useFetch<Voice[]>('/api/voices', {
+    default: () => [],
+  })
 
-  async function fetchVoicesFromDb() {
-    const db = await getDb()
-    voiceList.value = await db.select().from(voices)
-    if (!selectedVoice.value && voiceList.value.length > 0) {
-      selectedVoice.value = voiceList.value[0].name
-    }
-  }
-
-  async function syncVoices() {
-    pending.value = true
-    try {
-      const remote: VoicesResponse = await fetchVoices(settings.value.ttsServerUrl)
-      const db = await getDb()
-
-      for (const name of remote.builtin) {
-        const [existing] = await db.select().from(voices).where(eq(voices.name, name))
-        if (!existing) {
-          await db.insert(voices).values({ name, type: 'builtin' })
-        }
-      }
-
-      for (const name of remote.custom) {
-        const [existing] = await db.select().from(voices).where(eq(voices.name, name))
-        if (!existing) {
-          await db.insert(voices).values({ name, type: 'cloned' })
-        }
-      }
-
-      await persist()
-      await fetchVoicesFromDb()
-    } finally {
-      pending.value = false
-    }
-  }
+  const selectedVoice = useState<string>('selected-voice', () => '')
 
   function selectVoice(name: string) {
     selectedVoice.value = name
   }
 
+  async function syncVoices() {
+    await $fetch<Voice[]>('/api/voices/sync', { method: 'POST' })
+    await refresh()
+  }
+
+  async function cloneVoice(name: string, file: File, promptText?: string) {
+    const form = new FormData()
+    form.append('name', name)
+    form.append('file', file, `${name}.wav`)
+    if (promptText) form.append('prompt_text', promptText)
+    await $fetch('/api/voices/clone', { method: 'POST', body: form })
+    await refresh()
+  }
+
+  watch(voices, (list) => {
+    if (!selectedVoice.value && list.length > 0) {
+      selectedVoice.value = list[0].name
+    }
+  }, { immediate: true })
+
   return {
-    voices: readonly(voiceList),
+    voices,
     selectedVoice: readonly(selectedVoice),
-    pending: readonly(pending),
-    fetchVoicesFromDb,
+    pending: computed(() => status.value === 'pending'),
+    refresh,
     syncVoices,
+    cloneVoice,
     selectVoice,
   }
 }

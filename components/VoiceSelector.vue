@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-const { voices, selectedVoice, selectVoice, fetchVoicesFromDb, syncVoices } = useVoices()
+const { voices, selectedVoice, selectVoice } = useVoices()
 
 const groupedVoices = computed(() => {
   const builtin = voices.value
@@ -28,15 +28,4 @@ const groupedVoices = computed(() => {
 function onSelect(value: string) {
   selectVoice(value)
 }
-
-// Fetch voices on mount
-onMounted(async () => {
-  if (voices.value.length === 0) {
-    try {
-      await syncVoices()
-    } catch {
-      await fetchVoicesFromDb()
-    }
-  }
-})
 </script>

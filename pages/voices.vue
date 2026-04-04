@@ -76,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-const { voices, pending, syncVoices, fetchVoicesFromDb } = useVoices()
+const { voices, pending, syncVoices } = useVoices()
 const cloneModalOpen = ref(false)
 const toast = useToast()
 
@@ -91,14 +91,4 @@ async function handleSync() {
 
 const builtinVoices = computed(() => voices.value.filter((v) => v.type === 'builtin'))
 const clonedVoices = computed(() => voices.value.filter((v) => v.type === 'cloned'))
-
-onMounted(async () => {
-  if (voices.value.length === 0) {
-    try {
-      await syncVoices()
-    } catch {
-      await fetchVoicesFromDb()
-    }
-  }
-})
 </script>

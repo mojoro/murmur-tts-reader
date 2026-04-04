@@ -95,8 +95,7 @@
 <script setup lang="ts">
 const open = defineModel<boolean>('open', { default: false })
 
-const { settings } = useSettings()
-const { syncVoices } = useVoices()
+const { syncVoices, cloneVoice: cloneVoiceFn } = useVoices()
 const toast = useToast()
 
 const name = ref('')
@@ -107,7 +106,6 @@ const isDragging = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const activeTab = ref('upload')
 
-// Recording state
 const recording = ref(false)
 const recordedBlob = ref<Blob | null>(null)
 const recordedUrl = ref<string | null>(null)
@@ -174,7 +172,6 @@ async function startRecording() {
       recordingDuration.value = recordingTime.value
     }
 
-    // Clear previous recording
     if (recordedUrl.value) {
       URL.revokeObjectURL(recordedUrl.value)
       recordedUrl.value = null
@@ -209,7 +206,6 @@ async function convertToWav(webmBlob: Blob): Promise<Blob> {
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
   audioCtx.close()
 
-  // Encode as 16-bit PCM WAV
   const numChannels = 1
   const sampleRate = audioBuffer.sampleRate
   const channelData = audioBuffer.getChannelData(0)
@@ -217,7 +213,6 @@ async function convertToWav(webmBlob: Blob): Promise<Blob> {
   const buffer = new ArrayBuffer(44 + dataLength)
   const view = new DataView(buffer)
 
-  // WAV header
   const writeString = (offset: number, str: string) => {
     for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
   }
@@ -226,7 +221,7 @@ async function convertToWav(webmBlob: Blob): Promise<Blob> {
   writeString(8, 'WAVE')
   writeString(12, 'fmt ')
   view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true) // PCM
+  view.setUint16(20, 1, true)
   view.setUint16(22, numChannels, true)
   view.setUint32(24, sampleRate, true)
   view.setUint32(28, sampleRate * numChannels * 2, true)
@@ -235,7 +230,6 @@ async function convertToWav(webmBlob: Blob): Promise<Blob> {
   writeString(36, 'data')
   view.setUint32(40, dataLength, true)
 
-  // PCM samples
   let offset = 44
   for (let i = 0; i < channelData.length; i++) {
     const sample = Math.max(-1, Math.min(1, channelData[i]))
@@ -250,13 +244,11 @@ async function handleClone() {
   if (!canClone.value || !audioSource.value) return
   cloning.value = true
   try {
-    await cloneVoice(
-      settings.value.ttsServerUrl,
+    await cloneVoiceFn(
       name.value.trim(),
       audioSource.value,
       promptText.value.trim() || undefined,
     )
-    await syncVoices()
     toast.add({ title: 'Voice cloned', description: `"${name.value}" is now available`, color: 'success' })
     resetAndClose()
   } catch (e: any) {
@@ -281,7 +273,6 @@ function resetAndClose() {
   recordingDuration.value = 0
 }
 
-// Cleanup on unmount
 onUnmounted(() => {
   stopRecording()
   if (recordedUrl.value) URL.revokeObjectURL(recordedUrl.value)
