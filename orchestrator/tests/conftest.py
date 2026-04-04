@@ -9,6 +9,7 @@ from orchestrator.config import DB_PATH, DATA_DIR
 from orchestrator.db import init_db
 from orchestrator.engine_manager import EngineManager, EngineStatus
 from orchestrator.job_events import JobEventBus
+from orchestrator.job_worker import JobWorker
 
 @pytest_asyncio.fixture
 async def client(tmp_path, monkeypatch):
@@ -31,14 +32,15 @@ async def reset_engine_manager(monkeypatch):
     monkeypatch.setattr("orchestrator.engine_manager.engine_manager", fresh)
     monkeypatch.setattr("orchestrator.routers.backends.engine_manager", fresh)
     monkeypatch.setattr("orchestrator.routers.reads.engine_manager", fresh)
+    monkeypatch.setattr("orchestrator.job_worker.engine_manager", fresh)
     try:
         monkeypatch.setattr("orchestrator.routers.health.engine_manager", fresh)
     except AttributeError:
-        pass  # health router doesn't import engine_manager yet (added in Task 6)
+        pass
     try:
         monkeypatch.setattr("orchestrator.routers.voices.engine_manager", fresh)
     except AttributeError:
-        pass  # voices router doesn't import engine_manager yet (added in Task 5)
+        pass
     yield fresh
 
 
@@ -47,26 +49,16 @@ async def reset_job_event_bus(monkeypatch):
     """Reset job event bus state between tests."""
     fresh = JobEventBus()
     monkeypatch.setattr("orchestrator.job_events.job_event_bus", fresh)
+    monkeypatch.setattr("orchestrator.routers.reads.job_event_bus", fresh)
+    monkeypatch.setattr("orchestrator.routers.queue.job_event_bus", fresh)
+    monkeypatch.setattr("orchestrator.job_worker.job_event_bus", fresh)
+    yield fresh
 
-    # Patch in routers if they import job_event_bus (will be added in Task 4)
-    try:
-        import orchestrator.routers.reads
-        monkeypatch.setattr("orchestrator.routers.reads.job_event_bus", fresh)
-    except (ImportError, AttributeError):
-        pass
 
-    # Queue router will be created in Task 4
-    try:
-        import orchestrator.routers.queue
-        monkeypatch.setattr("orchestrator.routers.queue.job_event_bus", fresh)
-    except (ImportError, AttributeError):
-        pass
-
-    # Job worker will be created in Task 5
-    try:
-        import orchestrator.job_worker
-        monkeypatch.setattr("orchestrator.job_worker.job_event_bus", fresh)
-    except (ImportError, AttributeError):
-        pass
-
+@pytest_asyncio.fixture(autouse=True)
+async def disable_job_worker(monkeypatch):
+    """Prevent worker from running during endpoint tests."""
+    fresh = JobWorker()
+    monkeypatch.setattr("orchestrator.job_worker.job_worker", fresh)
+    monkeypatch.setattr("orchestrator.main.job_worker", fresh)
     yield fresh
