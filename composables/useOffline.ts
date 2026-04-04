@@ -18,6 +18,7 @@ async function updatePendingCount() {
 }
 
 async function processQueue(): Promise<void> {
+  if (isSyncing.value) return
   const mutations = await getAllMutations()
   if (mutations.length === 0) return
 
