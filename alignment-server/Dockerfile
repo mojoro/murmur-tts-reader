@@ -5,10 +5,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# Install CPU-only torch first (smaller than default CUDA bundle)
-RUN uv pip install --system torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-
 COPY alignment-server/pyproject.toml alignment-server/uv.lock* alignment-server/
+
+# Use CPU-only torch index to avoid downloading the massive CUDA bundle
+ENV UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN cd alignment-server && uv sync --no-dev --no-install-project
 
 COPY alignment-server/ alignment-server/
