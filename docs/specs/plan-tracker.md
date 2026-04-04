@@ -11,7 +11,7 @@
 | 3 | Job Queue | DONE | merged | 74 total | Background job worker, SSE progress events, generate endpoint, queue router (list/cancel/SSE), startup recovery, auto-resume |
 | 4 | Nuxt BFF | DONE | merged | 5 (JWT) | Auth middleware (JWT cookie), auth routes (register/login/logout/me), catch-all proxy with X-User-Id, orchestrator fetch utility |
 | 5 | UI Migration | DONE | merged | build pass | Auth pages (login/register), auth middleware, all composables rewritten to BFF API, queue page, engine selector, SSR enabled, sql.js/drizzle removed |
-| 6 | Docker Compose | TODO | — | — | Dockerfiles for Nuxt + orchestrator + alignment, compose file, volume config |
+| 6 | Docker Compose | DONE | merged | 4 (alignment) | Dockerfiles (Nuxt, orchestrator, alignment), docker-compose.yml, .dockerignore, .env.example, CPU-only torch, configurable port |
 | 7 | PWA Offline Sync | TODO | — | — | Service worker sync, IndexedDB cache, conflict resolution |
 
 ## Plan Details (for Plans 3-7)
