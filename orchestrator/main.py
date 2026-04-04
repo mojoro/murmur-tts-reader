@@ -1,7 +1,10 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+logger = logging.getLogger(__name__)
 
 import orchestrator.config as config
 from orchestrator.config import AUDIO_DIR, DATA_DIR
@@ -16,6 +19,32 @@ from orchestrator.routers.bookmarks import router as bookmarks_router
 from orchestrator.routers.health import router as health_router
 from orchestrator.routers.backends import router as backends_router
 from orchestrator.routers.queue import router as queue_router
+
+
+async def sync_builtin_voices():
+    """Fetch builtin voices from the active engine and insert into DB."""
+    engine_url = engine_manager.get_engine_url()
+    if not engine_url:
+        return
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{engine_url}/tts/voices", timeout=10)
+            resp.raise_for_status()
+        data = resp.json()
+        async with open_db() as db:
+            for voice_name in data.get("builtin", []):
+                existing = await db.execute_fetchall(
+                    "SELECT id FROM voices WHERE user_id IS NULL AND name = ?", (voice_name,)
+                )
+                if not existing:
+                    await db.execute(
+                        "INSERT INTO voices (user_id, name, type) VALUES (NULL, ?, 'builtin')", (voice_name,)
+                    )
+            await db.commit()
+        logger.info(f"Synced {len(data.get('builtin', []))} builtin voices")
+    except Exception as e:
+        logger.warning(f"Failed to sync builtin voices: {e}")
 
 
 async def reset_stale_jobs():
@@ -34,6 +63,12 @@ async def lifespan(app: FastAPI):
     await init_db()
     config.ENGINES_DIR.mkdir(parents=True, exist_ok=True)
     engine_manager.check_installed()
+    # Auto-start pocket-tts if installed
+    if engine_manager.get_status("pocket-tts").value in ("installed", "stopped"):
+        logger.info("Auto-starting default engine: pocket-tts")
+        started = await engine_manager.start_engine("pocket-tts")
+        if started:
+            await sync_builtin_voices()
     await reset_stale_jobs()
     await job_worker.start()
     yield
