@@ -4,6 +4,15 @@
     class="fixed bottom-0 left-0 right-0 z-50 border-t border-neutral-200 dark:border-neutral-800 backdrop-blur-lg bg-white/80 dark:bg-neutral-950/80 px-4 py-3"
   >
     <div class="max-w-3xl mx-auto flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+      <!-- Read title -->
+      <NuxtLink
+        v-if="currentReadId"
+        :to="`/read/${currentReadId}`"
+        class="text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate max-w-[120px] sm:max-w-[180px] hover:text-primary-500"
+      >
+        {{ currentReadTitle }}
+      </NuxtLink>
+
       <!-- Skip prev -->
       <UButton
         icon="i-lucide-skip-back"
@@ -36,32 +45,30 @@
       <!-- Progress bar -->
       <div class="flex-1 flex items-center gap-2">
         <span class="text-xs text-neutral-500 tabular-nums w-10 text-right">
-          {{ formatTime(currentTime) }}
+          {{ formatTime(elapsedTime) }}
         </span>
         <UProgress
-          :model-value="duration > 0 ? (currentTime / duration) * 100 : 0"
+          :model-value="totalDuration > 0 ? (elapsedTime / totalDuration) * 100 : 0"
           size="xs"
           class="flex-1"
         />
         <span class="text-xs text-neutral-500 tabular-nums w-10">
-          {{ formatTime(duration) }}
+          {{ formatTime(totalDuration) }}
         </span>
       </div>
 
       <!-- Speed control -->
-      <UDropdownMenu
-        :items="speedItems"
-      >
+      <UDropdownMenu :items="speedItems">
         <UButton variant="ghost" color="neutral" size="sm">
           {{ playbackRate }}x
         </UButton>
       </UDropdownMenu>
     </div>
 
-    <!-- Segment indicator -->
+    <!-- Time remaining -->
     <div class="max-w-3xl mx-auto mt-1">
       <p class="text-xs text-neutral-500 truncate">
-        Segment {{ currentSegmentIndex + 1 }} of {{ segments.length }}
+        {{ hasEstimates ? '~' : '' }}{{ formatRemaining(remainingTime) }}
       </p>
     </div>
   </div>
@@ -70,11 +77,15 @@
 <script setup lang="ts">
 const {
   isPlaying,
-  currentTime,
-  duration,
   playbackRate,
   currentSegmentIndex,
   segments,
+  currentReadId,
+  currentReadTitle,
+  hasEstimates,
+  totalDuration,
+  elapsedTime,
+  remainingTime,
   togglePlayPause,
   skipPrev,
   skipNext,
@@ -96,5 +107,13 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function formatRemaining(seconds: number): string {
+  if (!seconds || !isFinite(seconds)) return ''
+  const h = Math.floor(seconds / 3600)
+  const m = Math.ceil((seconds % 3600) / 60)
+  if (h > 0) return `${h} hr ${m} min remaining`
+  return `${m} min remaining`
 }
 </script>
