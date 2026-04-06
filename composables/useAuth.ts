@@ -7,7 +7,9 @@ export function useAuth() {
 
   async function fetchUser() {
     try {
-      user.value = await $fetch<User>('/api/auth/me')
+      // useRequestFetch forwards cookies during SSR so the auth middleware sees the JWT
+      const $api = useRequestFetch()
+      user.value = await $api<User>('/api/auth/me')
     } catch {
       user.value = null
     }
