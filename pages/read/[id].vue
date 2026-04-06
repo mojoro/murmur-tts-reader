@@ -96,8 +96,6 @@
     <!-- Reader view -->
     <ReaderView :segments="readData.segments" />
 
-    <!-- Audio player -->
-    <AudioPlayer />
   </div>
 </template>
 
@@ -140,7 +138,7 @@ const initialLoadDone = ref(false)
 watch(readData, (data) => {
   if (data) {
     const initialSegment = !initialLoadDone.value ? data.progress_segment ?? 0 : undefined
-    setSegments(data.segments, initialSegment)
+    setSegments(data.segments, { initialSegment, readId: data.id, readTitle: data.title })
     initialLoadDone.value = true
   }
 }, { immediate: true })
