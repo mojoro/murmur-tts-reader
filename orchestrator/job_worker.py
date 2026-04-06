@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from pathlib import Path
 
 import httpx
 
@@ -89,6 +90,21 @@ class JobWorker:
                     (job_id,),
                 )
                 await db.commit()
+            return
+
+        # Ensure cloned voice WAV exists on the active engine
+        voice_ok = await self._ensure_voice_on_engine(job)
+        if not voice_ok:
+            async with open_db() as db:
+                await db.execute(
+                    "UPDATE jobs SET status = 'failed', error = ?, completed_at = datetime('now') WHERE id = ?",
+                    (f"Voice '{job['voice']}' is not available on the current engine", job_id),
+                )
+                await db.commit()
+            await job_event_bus.emit(user_id, "job:failed", {
+                "jobId": job_id, "readId": read_id,
+                "error": f"Voice '{job['voice']}' is not available on the current engine",
+            })
             return
 
         # Get ungenerated segments
@@ -185,7 +201,7 @@ class JobWorker:
                 resp = await client.post(
                     f"{engine_url}/tts/generate",
                     json=payload,
-                    timeout=120,
+                    timeout=600,
                 )
                 resp.raise_for_status()
                 audio_data = resp.content
@@ -231,6 +247,64 @@ class JobWorker:
             await db.commit()
 
         return True
+
+    async def _ensure_voice_on_engine(self, job: dict) -> bool:
+        """Copy cloned voice WAV to the active engine if it doesn't have it.
+        Returns False if the voice cannot be made available on the engine."""
+        voice = job["voice"]
+        user_id = job["user_id"]
+        engine_url = engine_manager.get_engine_url()
+        if not engine_url:
+            return False
+
+        # Check if the engine already has this voice
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{engine_url}/tts/voices", timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                all_voices = data.get("builtin", []) + data.get("custom", [])
+                if voice in all_voices:
+                    return True
+        except Exception:
+            return True  # can't check, let generation attempt proceed
+
+        # Look up the WAV in orchestrator storage
+        async with open_db() as db:
+            rows = await db.execute_fetchall(
+                "SELECT wav_path FROM voices WHERE name = ? AND (user_id IS NULL OR user_id = ?)",
+                (voice, user_id),
+            )
+        if not rows:
+            logger.error("Voice '%s' not found in database", voice)
+            return False
+        wav_path = dict(rows[0]).get("wav_path")
+        if not wav_path:
+            logger.error("Voice '%s' is a builtin from another engine and has no WAV file to copy", voice)
+            return False
+
+        wav_file = Path(wav_path)
+        if not wav_file.exists():
+            logger.error("Voice '%s' WAV file missing: %s", voice, wav_path)
+            return False
+
+        # Send the voice to the engine's clone endpoint
+        logger.info("Copying voice '%s' to engine at %s", voice, engine_url)
+        try:
+            async with httpx.AsyncClient() as client:
+                content = wav_file.read_bytes()
+                resp = await client.post(
+                    f"{engine_url}/tts/clone-voice",
+                    files={"file": (f"{voice}.wav", content, "audio/wav")},
+                    data={"name": voice},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                logger.info("Voice '%s' copied to engine", voice)
+                return True
+        except Exception:
+            logger.exception("Failed to copy voice '%s' to engine", voice)
+            return False
 
 
 job_worker = JobWorker()
