@@ -133,6 +133,7 @@ const { isOnline } = useOffline()
 
 const exporting = ref(false)
 const initialLoadDone = ref(false)
+const autoGenerateAttempted = ref(false)
 
 // Set segments for audio player when read data loads
 watch(readData, (data) => {
@@ -141,6 +142,20 @@ watch(readData, (data) => {
     setSegments(data.segments, { initialSegment, readId: data.id, readTitle: data.title })
     initialLoadDone.value = true
   }
+}, { immediate: true })
+
+// Auto-start generation when arriving from /new with a voice param
+watch(readData, async (data) => {
+  if (!data || autoGenerateAttempted.value || generating.value) return
+  const hasAudio = data.segments.some(s => s.audio_generated)
+  if (hasAudio) return
+
+  const voiceParam = useRoute().query.voice as string | undefined
+  const voice = voiceParam || selectedVoice.value
+  if (!voice) return
+
+  autoGenerateAttempted.value = true
+  await generate(voice)
 }, { immediate: true })
 
 // Final refresh when generation completes (catches the last segment)

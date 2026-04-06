@@ -209,7 +209,7 @@ async function handleCreate() {
       file_name: activeMode.value === 'file' ? selectedFile.value?.name : undefined,
     })
     toast.add({ title: 'Read created', color: 'success' })
-    await navigateTo(`/read/${result.id}`)
+    await navigateTo(`/read/${result.id}?voice=${encodeURIComponent(selectedVoice.value)}`)
   } catch (e: any) {
     toast.add({ title: 'Failed to create read', description: e.message, color: 'error' })
   } finally {
