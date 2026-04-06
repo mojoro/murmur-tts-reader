@@ -20,7 +20,6 @@ f5tts-server/voices/
 gptsovits-server/pretrained_models/
 gptsovits-server/voices/
 cosyvoice-server/models/
-cosyvoice-server/repo/
 cosyvoice-server/voices/
 
 # Dev/docs
