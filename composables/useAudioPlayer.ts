@@ -40,6 +40,12 @@ function ensureAudio(): HTMLAudioElement {
     audio.addEventListener('pause', () => {
       isPlaying.value = false
     })
+    // Re-apply playback rate when audio starts — some browsers reset it on src change
+    audio.addEventListener('playing', () => {
+      if (audio && audio.playbackRate !== playbackRate.value) {
+        audio.playbackRate = playbackRate.value
+      }
+    })
   }
   return audio!
 }
@@ -54,6 +60,7 @@ async function playSegment(index: number) {
 
   const el = ensureAudio()
   el.src = url
+  el.defaultPlaybackRate = playbackRate.value
   el.playbackRate = playbackRate.value
   await el.play()
 }
@@ -89,7 +96,10 @@ export function useAudioPlayer() {
 
   function setRate(rate: number) {
     playbackRate.value = rate
-    if (audio) audio.playbackRate = rate
+    if (audio) {
+      audio.defaultPlaybackRate = rate
+      audio.playbackRate = rate
+    }
     if (import.meta.client) {
       localStorage.setItem(RATE_STORAGE_KEY, String(rate))
     }
