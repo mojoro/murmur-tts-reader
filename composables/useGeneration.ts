@@ -15,10 +15,10 @@ export function useGeneration(readId: Ref<number>, options: GenerationOptions = 
 
   let eventSource: EventSource | null = null
 
-  async function generate(voice: string, language?: string) {
+  async function generate(voice: string, language?: string, regenerate?: boolean) {
     const result = await $fetch<Job>(`/api/reads/${readId.value}/generate`, {
       method: 'POST',
-      body: { voice, language },
+      body: { voice, language, regenerate },
     })
     job.value = result
     connectSSE()
