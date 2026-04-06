@@ -1,71 +1,105 @@
 # Murmur
 
-Open-source, offline alternative to ElevenReader. Paste text, select a voice, and it synthesizes audio using local TTS — no API keys, no cloud. Voice cloning supported.
+Open-source, self-hosted alternative to ElevenReader. Paste text, select a voice, and it synthesizes audio using local TTS — no API keys, no cloud. Voice cloning supported.
 
 ## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Nuxt 3 + Vue 3 Composition API (PWA, SSR disabled) |
-| UI | Nuxt UI 3 + Tailwind CSS 4 (dark mode default, primary=sky, neutral=zinc) |
-| Storage | SQLite in browser (sql.js WASM + Drizzle ORM) persisted to IndexedDB |
-| Audio storage | IndexedDB (raw WAV blobs, keyed by `readId:segmentIndex`) |
-| TTS Backends | FastAPI (Python) — 5 interchangeable engines, all on port 8000 |
+| Frontend | Nuxt 3 + Vue 3 Composition API (SSR + PWA) |
+| UI | Nuxt UI 3 + Tailwind CSS 4 (dark mode default, primary=emerald, neutral=zinc) |
+| Server | Nitro (Nuxt server routes) — BFF that proxies to orchestrator |
+| Auth | JWT in httpOnly cookie, verified server-side (jose) |
+| Orchestrator | FastAPI (Python) — owns SQLite DB, manages TTS engines, job queue |
+| TTS Engines | 5 interchangeable backends, managed by orchestrator |
 | Alignment | FastAPI (Python) — WhisperX forced-alignment on port 8001 |
+| Offline | Workbox service worker + IndexedDB mutation queue |
 
 ## Architecture
 
 ```
-[TTS backend]  ←── configurable URL (localStorage)
+[TTS Engines]  ←── managed by orchestrator (subprocess lifecycle)
       │
-      ▼ (direct HTTP, same LAN)
-[Nuxt PWA in browser]
-  ├── sql.js (WASM SQLite) ──→ IndexedDB (persistence)
-  ├── Drizzle ORM (typed queries)
-  ├── Audio blobs ──→ IndexedDB (separate from SQLite)
-  └── Service Worker (offline cache)
+      ▼
+[Orchestrator :8000]  ←── SQLite DB + audio files on disk
+      │                    job queue, engine management, auth
+      ▼
+[Nitro BFF]  ←── JWT validation, X-User-Id header injection
+      │          catch-all proxy: /api/* → orchestrator
+      ▼
+[Nuxt SSR + PWA in browser]
+  ├── Auth (login/register, httpOnly cookie)
+  ├── useFetch/useAsyncData against /api/* routes
+  ├── Workbox caching (audio=CacheFirst, reads=NetworkFirst)
+  └── IndexedDB offline mutation queue
       │
-      ▼ (direct HTTP, same LAN)
-[Alignment server]  ←── configurable URL (localStorage)
+      ▼ (optional, for word-level alignment)
+[Alignment server :8001]  ←── called by orchestrator, not frontend
 ```
 
-The frontend is a client-only PWA (`ssr: false`). Each device gets its own isolated SQLite + IndexedDB. The browser calls TTS/alignment backends directly over the network.
+The frontend calls `/api/*` routes on the Nitro server, which validates the JWT cookie and proxies requests to the orchestrator with an `X-User-Id` header. The orchestrator owns all data (SQLite + audio WAVs on disk) and manages TTS engine processes.
 
 ## Dev Commands
 
 ```bash
-npm run dev    # Nuxt dev server (configured for port 4000, falls back to 3000)
-npm run build  # Production build
+npm run dev        # Nuxt dev server on port 4000
+npm run build      # Production build → .output/
+npm run test       # vitest run
+npm run test:watch # vitest watch mode
 ```
 
-### TTS Backends (pick one, all use port 8000)
+### Orchestrator (required)
 
 ```bash
-cd pocket-tts-server && uv run uvicorn main:app --port 8000   # 8 built-in voices, ~400MB model
-cd xtts-server && uv run uvicorn main:app --port 8000          # Multilingual, clone-only, CUDA
-cd f5tts-server && uv run uvicorn main:app --port 8000         # Clone-only, auto-transcribes ref
-cd gptsovits-server && uv run uvicorn main:app --port 8000     # Clone-only, auto-trims ref 3-10s
-cd cosyvoice-server && uv run uvicorn main:app --port 8000     # Zero-shot or cross-lingual
+cd orchestrator && uv run uvicorn main:app --port 8000
 ```
+
+### Alignment server (optional, enables word-level highlighting)
+
+```bash
+cd alignment-server && uv run uvicorn main:app --port 8001
+```
+
+### Docker (full stack)
+
+```bash
+cp .env.example .env  # Set MURMUR_JWT_SECRET
+docker compose up      # app(:80) + orchestrator(:8000)
+docker compose --profile full up  # includes alignment server
+```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MURMUR_JWT_SECRET` | Yes (prod) | JWT signing secret. Default: `dev-secret-change-in-production` |
+| `MURMUR_PORT` | No | Host port for Docker (default: 80) |
+| `HF_TOKEN` | No | Hugging Face token (needed for some voice cloning models) |
+| `NUXT_ORCHESTRATOR_URL` | No | Orchestrator URL (default: `http://localhost:8000`) |
 
 ## Project Structure
 
 ```
 pages/
   index.vue              # / — Library grid (search, sort, delete)
-  new.vue                # /new — Create read (title, text, voice)
+  new.vue                # /new — Create read (title, text, voice, URL/file import)
   read/[id].vue          # /read/:id — Reader with TTS generation, playback, bookmarks
   voices.vue             # /voices — Sync built-in, clone custom voices
-  settings.vue           # /settings — TTS + alignment server URLs
+  settings.vue           # /settings — Engine selection, offline sync, storage usage
+  login.vue              # /login — Email/password login
+  register.vue           # /register — New account creation
+  queue.vue              # /queue — Job queue monitoring with progress
 
 components/
   AppHeader.vue          # Top bar: hamburger, health indicator, color mode toggle
-  AppSidebar.vue         # Vertical nav menu (Library, New Read, Voices, Settings)
+  AppSidebar.vue         # Vertical nav menu + logout button
   LibraryGrid.vue        # Search/sort/grid of LibraryCards + delete modal
-  LibraryCard.vue        # Individual read card with type badge, preview, timestamp
+  LibraryCard.vue        # Read card with type badge, preview, progress, timestamp
   TextInput.vue          # Textarea with char count + read time estimate
   VoiceSelector.vue      # Grouped dropdown (builtin/cloned) — used on /new and /read/:id
   VoiceCloneModal.vue    # WAV upload + drag-drop + optional prompt text
+  EngineSelector.vue     # TTS engine install/switch UI with status indicators
+  OfflineIndicator.vue   # Offline status + pending sync queue count
   ReaderView.client.vue  # Segment display with click-to-play and active highlighting
   AudioPlayer.client.vue # Fixed bottom bar: play/pause, skip, seek, speed control
   WordHighlighter.client.vue  # Word-by-word highlighting during playback
@@ -73,100 +107,120 @@ components/
   BookmarkList.vue       # List/jump/delete bookmarks
 
 composables/
-  useDatabase.ts         # sql.js init, IDB persistence, singleton getDb()
-  useLibrary.ts          # Read CRUD, sentence splitting into segments
-  useTTS.ts              # Generation loop: TTS → align → store audio + timings
-  useVoices.ts           # Voice list sync from backend, selection state
-  useAudioPlayer.ts      # Playback control: play/pause/seek/skip/speed
-  useAudioStorage.ts     # IndexedDB ops for audio blobs (save/load/delete)
-  useBookmarks.ts        # Bookmark CRUD tied to a read ID
-  useSettings.ts         # localStorage for server URLs with defaults
+  useAuth.ts             # Login/register/logout, fetchUser, loggedIn state
+  useLibrary.ts          # Read CRUD via /api/reads
+  useGeneration.ts       # Job-based audio generation with SSE progress
+  useVoices.ts           # Voice list sync + clone via /api/voices
+  useAudioPlayer.ts      # Playback control: play/pause/seek/skip/speed, currentTime tracking
+  useBookmarks.ts        # Bookmark CRUD via /api/reads/:id/bookmarks (offline-aware)
+  useBackends.ts         # Engine status polling + SSE for backend:status events
+  useQueue.ts            # Job listing + SSE events via /api/queue
+  useOffline.ts          # Online/offline state + mutation replay on reconnect
+  useBackgroundSync.ts   # Periodic offline cache warming (15-min batched audio fetch)
 
 utils/
-  tts-client.ts          # HTTP client: fetchHealth, fetchVoices, generateAudio, cloneVoice
-  align-client.ts        # HTTP client: alignAudio (WhisperX)
+  document-parser.ts     # PDF (pdf.js), EPUB (jszip), DOCX (mammoth), TXT/Markdown/HTML parsing
+  url-extractor.ts       # URL fetching via CORS proxy + @mozilla/readability
   sentence-splitter.ts   # Smart splitting (handles abbreviations, initials, decimals)
   wav-concat.ts          # WAV blob concatenation for audio export
+  offline-queue.ts       # IndexedDB mutation persistence for offline operations
 
-shared/schema.ts         # Drizzle ORM schema (single source of truth for DB)
-types/db.ts              # Drizzle-inferred types (Read, AudioSegment, Voice, Bookmark)
-types/tts.ts             # API types (HealthResponse, VoicesResponse, WordTiming, etc.)
+types/api.ts             # All API types: User, ReadSummary, ReadDetail, AudioSegment,
+                         # Voice, Bookmark, Job, Backend, HealthResponse, WordTiming, etc.
+
+middleware/
+  auth.global.ts         # Client-side route guard — redirects to /login if unauthenticated
+
+server/
+  middleware/auth.ts     # Validates JWT cookie on /api/* routes, sets event.context.userId
+  api/auth/              # login.post, register.post, logout.post, me.get
+  api/[...].ts           # Catch-all proxy: strips /api, forwards to orchestrator with X-User-Id
+  utils/jwt.ts           # JWT verification (jose)
+  utils/orchestrator.ts  # orchestratorFetch() helper + cookie config
+
 layouts/default.vue      # Desktop sidebar + mobile USlideover drawer + header
-app.vue                  # Root: wraps everything in UApp > NuxtLayout > NuxtPage
-app.config.ts            # Nuxt UI theme: primary=sky, neutral=zinc
+app.vue                  # Root: UApp > NuxtLayout > NuxtPage
+app.config.ts            # Nuxt UI theme: primary=emerald, neutral=zinc
 app.css                  # @import "tailwindcss" + @import "@nuxt/ui"
 ```
 
-## Database Schema
+## Auth Flow
 
-Defined in `shared/schema.ts`. Runs in-browser via sql.js WASM.
+1. User registers/logs in via `/api/auth/*` — Nitro proxies to orchestrator
+2. Orchestrator returns JWT, Nitro sets it as httpOnly cookie (`murmur_token`, 72h expiry)
+3. All subsequent `/api/*` requests: Nitro middleware validates JWT, injects `X-User-Id` header
+4. Client-side `auth.global.ts` middleware redirects unauthenticated users to `/login`
+5. Public routes: `/login`, `/register`, `/api/health`, `/api/auth/*`
 
-| Table | Key columns |
-|-------|-------------|
-| `reads` | id, title, type (text\|url\|file), source_url, file_name, content, created_at, updated_at, progress_segment, progress_word |
-| `audioSegments` | id, read_id (FK), segment_index, text, audio_path (IDB key), word_timings_json, generated_at |
-| `voices` | id, name (UNIQUE), type (builtin\|cloned), wav_path, created_at |
-| `bookmarks` | id, read_id (FK), segment_index, word_offset, note, created_at |
+## Orchestrator API (proxied through `/api/*`)
 
-Audio WAV blobs are stored separately in IndexedDB via `useAudioStorage`, keyed by `readId:segmentIndex`. The `audio_path` column in `audioSegments` stores this key.
+The Nuxt BFF proxies all `/api/*` requests to the orchestrator. Frontend code calls these via `useFetch('/api/...')`.
 
-Drizzle migrations live in `server/db/migrations/` (generated via `npx drizzle-kit`), but are only used for reference — the browser creates tables directly from the schema.
-
-## TTS Backend API Contract
-
-All 5 backends implement this identical interface:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | `{status, model_loaded, backend}` |
-| `/tts/voices` | GET | `{builtin: [...], custom: [...]}` |
-| `/tts/generate` | POST | `{text, voice, language?}` → streams WAV (24 kHz) |
-| `/tts/clone-voice` | POST | Form: `name`, `file` (WAV), `prompt_text?` → saves voice |
-
-## Alignment Server API
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/align` | POST | Form: `audio` (WAV), `text` (str) → `{words: [{word, start, end}]}` |
-
-## Configuration
-
-Server URLs are per-device via `/settings`, persisted in `localStorage`:
-
-| Setting | Default |
-|---------|---------|
-| TTS Server URL | `http://localhost:8000` |
-| Alignment Server URL | `http://localhost:8001` |
-
-The header health indicator polls `TTS_SERVER_URL/health` every 30s.
+| Frontend route | Orchestrator route | Description |
+|----------------|--------------------|-------------|
+| `GET /api/health` | `GET /health` | DB status, active engine, alignment status |
+| `GET /api/reads` | `GET /reads` | List user's reads |
+| `POST /api/reads` | `POST /reads` | Create read (sentence splitting done server-side) |
+| `GET /api/reads/:id` | `GET /reads/:id` | Read detail with segments |
+| `PATCH /api/reads/:id` | `PATCH /reads/:id` | Update progress, title |
+| `DELETE /api/reads/:id` | `DELETE /reads/:id` | Delete read + audio files |
+| `GET /api/audio/:readId/:segIdx` | `GET /audio/:readId/:segIdx` | Stream audio WAV |
+| `POST /api/reads/:id/generate` | `POST /reads/:id/generate` | Start TTS job → returns Job |
+| `GET /api/reads/:id/bookmarks` | `GET /reads/:id/bookmarks` | List bookmarks |
+| `POST /api/reads/:id/bookmarks` | `POST /reads/:id/bookmarks` | Create bookmark |
+| `DELETE /api/reads/:id/bookmarks/:bid` | ... | Delete bookmark |
+| `GET /api/voices` | `GET /voices` | List voices (builtin + cloned) |
+| `POST /api/voices/clone` | `POST /voices/clone` | Clone voice (FormData: name, file) |
+| `GET /api/backends` | `GET /backends` | List available TTS engines |
+| `POST /api/backends/:name/select` | ... | Set active engine |
+| `GET /api/backends/events` | ... | SSE: engine status changes |
+| `GET /api/queue` | `GET /queue` | List user's jobs |
+| `DELETE /api/queue/:id` | `DELETE /queue/:id` | Cancel job |
+| `GET /api/queue/events` | `GET /queue/events` | SSE: job progress |
 
 ## Key Design Decisions
 
-- **Client-only rendering** (`ssr: false`): sql.js WASM can't run server-side. The app is a pure client PWA.
-- **Dual IndexedDB storage**: SQLite (via sql.js) for structured data; raw IndexedDB for audio blobs. This avoids bloating the SQLite DB with binary data.
-- **Sentence-by-sentence TTS**: `splitSentences()` breaks text into segments. Each segment is TTS'd independently, enabling progressive playback and per-sentence alignment.
-- **Word-level highlighting**: After generating each segment's WAV, the alignment server runs WhisperX forced-alignment to produce word timestamps for the `WordHighlighter` component.
-- **Swappable backends**: All 5 TTS backends share the same API surface. Switch by changing the URL in settings.
-- **Voice requirement**: Creating a read requires selecting a voice. Voices come from the TTS backend (`/tts/voices`), so a connected backend is needed before creating reads.
-- **PWA distribution**: Installable via "Add to Home Screen". Service Worker caches the app shell. Each device has isolated storage.
+- **SSR enabled**: Login/register pages are server-rendered. All data-fetching pages use `useFetch`/`useAsyncData` with SSR support.
+- **BFF proxy pattern**: Frontend never talks to orchestrator directly. Nitro validates auth and injects user identity, keeping the orchestrator's internal API simple.
+- **Job-based generation**: TTS generation is async — `POST /reads/:id/generate` creates a job, progress streams via SSE. The orchestrator processes jobs FIFO, one at a time.
+- **Engine management**: The orchestrator manages TTS engine processes (install, start, stop). Users switch engines via the UI; only one engine runs at a time.
+- **Sentence-by-sentence TTS**: Text is split into segments server-side. Each segment is TTS'd independently, enabling progressive playback and per-sentence alignment.
+- **Word-level highlighting**: After generating each segment's WAV, the orchestrator calls the alignment server (WhisperX) for word timestamps used by `WordHighlighter`.
+- **PWA + offline**: Workbox caches app shell + API responses. Audio uses CacheFirst (immutable once generated). An IndexedDB mutation queue replays failed writes on reconnect.
+- **Per-user isolation**: All data is scoped by `X-User-Id`. Each user sees only their reads, voices, bookmarks, and jobs.
+
+## Testing
+
+```bash
+npm run test       # Run all tests
+npm run test:watch # Watch mode
+```
+
+Tests live in `tests/` and use vitest + jsdom. Current coverage:
+- `tests/server/jwt.test.ts` — JWT token verification
+- `tests/composables/useOffline.test.ts` — Offline state management
+- `tests/utils/offline-queue.test.ts` — IndexedDB mutation queue
 
 ## What's Implemented
 
-- Text input → sentence splitting → per-segment TTS → playback
+- User authentication (register, login, logout, JWT sessions)
+- Text input → sentence splitting → job-based TTS generation → playback
 - URL ingestion (web articles via @mozilla/readability + CORS proxy)
 - Document import (PDF via pdf.js, EPUB via jszip, DOCX via mammoth, TXT)
 - Voice management (sync built-in from backend, clone via WAV upload or mic recording)
-- Audio player with skip, seek, speed control (0.5x–2.0x)
+- TTS engine management (install, switch, status monitoring via SSE)
+- Job queue with progress tracking and cancellation
+- Audio player with skip, seek, speed control (0.5x-2.0x)
+- Word-by-word highlighting during playback (WhisperX alignment)
 - Playback position saved per read, restored on reopen, progress shown on library cards
-- Word-level highlighting during playback (WhisperX alignment)
 - Bookmarks with notes at segment level
 - Audio export (concatenates segment WAVs into single download)
 - Library with search, sort, delete
+- PWA with offline support (Workbox caching + IndexedDB mutation queue + background sync)
+- Docker Compose deployment (app + orchestrator + optional alignment server)
 - Dark mode (default) with toggle
 - Responsive layout (desktop sidebar, mobile drawer)
 
 ## Not Yet Implemented
 
-- YouTube transcript extraction (requires server-side, CORS blocks client-side)
-- Ability to choose which TTS backend you want to use
-- Word-by-word highlighting in playback
+- YouTube transcript extraction
