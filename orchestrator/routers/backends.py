@@ -4,9 +4,11 @@ import logging
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
+from orchestrator.db import open_db
 from orchestrator.engine_manager import engine_manager
 from orchestrator.engine_registry import ENGINES
 from orchestrator.models import BackendResponse, SelectBackendRequest
+from orchestrator.routers.voices import sync_builtin_voices
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/backends", tags=["backends"])
@@ -41,6 +43,9 @@ async def select_backend(req: SelectBackendRequest):
         logger.error("Engine %s failed to start", req.name)
         raise HTTPException(status_code=503, detail=f"Failed to start engine: {req.name}")
     logger.info("Engine %s is now active", req.name)
+
+    async with open_db() as db:
+        await sync_builtin_voices(db)
 
     info = ENGINES[req.name]
     return BackendResponse(
@@ -81,6 +86,23 @@ async def _install_engine_task(name: str):
         logger.info("Background install of %s completed", name)
     else:
         logger.error("Background install of %s failed", name)
+
+
+@router.delete("/{name}")
+async def uninstall_backend(name: str):
+    logger.info("Uninstall requested for engine: %s", name)
+    if name not in ENGINES:
+        raise HTTPException(status_code=404, detail=f"Unknown engine: {name}")
+
+    status = engine_manager.get_status(name)
+    if status.value == "installing":
+        raise HTTPException(status_code=409, detail=f"Engine {name} is currently installing")
+
+    success = await engine_manager.uninstall_engine(name)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to uninstall {name}")
+
+    return {"message": f"Engine {name} uninstalled"}
 
 
 @router.get("/events")

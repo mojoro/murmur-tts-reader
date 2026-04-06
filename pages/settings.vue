@@ -15,6 +15,7 @@
         :backends="backends"
         @select="handleSelect"
         @install="handleInstall"
+        @uninstall="handleUninstall"
       />
     </section>
 
@@ -60,7 +61,7 @@
 <script setup lang="ts">
 import { clearMutations } from '~/utils/offline-queue'
 
-const { backends, loading, selectBackend, installBackend } = useBackends()
+const { backends, loading, selectBackend, installBackend, uninstallBackend } = useBackends()
 const { autoSyncEnabled, setAutoSync } = useBackgroundSync()
 const toast = useToast()
 
@@ -112,6 +113,15 @@ async function handleInstall(name: string) {
     toast.add({ title: `Installing ${name}...`, color: 'info' })
   } catch (e: any) {
     toast.add({ title: 'Install failed', description: e.message, color: 'error' })
+  }
+}
+
+async function handleUninstall(name: string) {
+  try {
+    await uninstallBackend(name)
+    toast.add({ title: `${name} uninstalled`, color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Uninstall failed', description: e.message, color: 'error' })
   }
 }
 

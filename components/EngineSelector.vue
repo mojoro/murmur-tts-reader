@@ -16,31 +16,41 @@
         <p class="text-xs text-neutral-400 mt-0.5">{{ backend.size }}</p>
       </div>
 
-      <div class="shrink-0">
-        <UBadge v-if="backend.status === 'running'" color="success" variant="subtle">Active</UBadge>
-        <UButton
-          v-else-if="backend.status === 'installed' || backend.status === 'stopped'"
-          size="sm"
-          variant="outline"
-          @click="emit('select', backend.name)"
-        >
-          Switch
-        </UButton>
-        <UButton
-          v-else-if="backend.status === 'available'"
-          size="sm"
-          variant="outline"
-          @click="emit('install', backend.name)"
-        >
-          Download
-        </UButton>
-        <div v-else-if="backend.status === 'installing'" class="flex items-center gap-2">
+      <div class="shrink-0 flex items-center gap-2">
+        <template v-if="backend.status === 'running'">
+          <UBadge color="success" variant="subtle">Active</UBadge>
+        </template>
+        <template v-else-if="backend.status === 'installed' || backend.status === 'stopped'">
+          <UButton size="sm" variant="outline" @click="emit('select', backend.name)">
+            Switch
+          </UButton>
+          <UButton
+            size="sm"
+            variant="ghost"
+            color="error"
+            icon="i-lucide-trash-2"
+            @click="emit('uninstall', backend.name)"
+          />
+        </template>
+        <template v-else-if="backend.status === 'available'">
+          <UButton size="sm" variant="outline" @click="emit('install', backend.name)">
+            Download
+          </UButton>
+        </template>
+        <template v-else-if="backend.status === 'installing'">
           <UIcon name="i-lucide-loader-2" class="size-4 animate-spin text-sky-500" />
           <span class="text-xs text-sky-500">Installing...</span>
-        </div>
-        <UBadge v-else-if="backend.status === 'unavailable'" color="error" variant="subtle">
-          Unavailable
-        </UBadge>
+        </template>
+        <template v-else-if="backend.status === 'unavailable'">
+          <UBadge color="error" variant="subtle">Unavailable</UBadge>
+          <UButton
+            size="sm"
+            variant="ghost"
+            color="error"
+            icon="i-lucide-trash-2"
+            @click="emit('uninstall', backend.name)"
+          />
+        </template>
       </div>
     </div>
   </div>
@@ -56,6 +66,7 @@ defineProps<{
 const emit = defineEmits<{
   select: [name: string]
   install: [name: string]
+  uninstall: [name: string]
 }>()
 
 function statusDotClass(status: EngineStatus) {
