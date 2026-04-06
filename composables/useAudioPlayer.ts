@@ -15,6 +15,9 @@ const duration = ref(0)
 const playbackRate = ref(loadRate())
 const currentSegmentIndex = ref(0)
 const segments = ref<AudioSegment[]>([])
+const currentReadId = ref<number | null>(null)
+const currentReadTitle = ref('')
+const segmentDurations = new Map<number, number>()
 
 let audio: HTMLAudioElement | null = null
 
@@ -26,6 +29,9 @@ function ensureAudio(): HTMLAudioElement {
     })
     audio.addEventListener('durationchange', () => {
       duration.value = audio!.duration
+      if (audio!.duration && isFinite(audio!.duration)) {
+        segmentDurations.set(currentSegmentIndex.value, audio!.duration)
+      }
     })
     audio.addEventListener('ended', () => {
       isPlaying.value = false
@@ -50,6 +56,15 @@ function ensureAudio(): HTMLAudioElement {
   return audio!
 }
 
+const WORDS_PER_MINUTE = 150
+
+function estimateSegmentDuration(seg: AudioSegment): number {
+  const known = segmentDurations.get(seg.segment_index)
+  if (known) return known
+  const wordCount = seg.text.split(/\s+/).length
+  return (wordCount / WORDS_PER_MINUTE) * 60
+}
+
 async function playSegment(index: number) {
   if (!import.meta.client) return
   const segment = segments.value[index]
@@ -66,10 +81,15 @@ async function playSegment(index: number) {
 }
 
 export function useAudioPlayer() {
-  function setSegments(segs: AudioSegment[], initialSegment?: number) {
+  function setSegments(segs: AudioSegment[], opts?: { initialSegment?: number; readId?: number; readTitle?: string }) {
+    if (opts?.readId !== undefined && opts.readId !== currentReadId.value) {
+      segmentDurations.clear()
+    }
     segments.value = segs
-    if (initialSegment !== undefined && initialSegment > 0 && segs.length) {
-      currentSegmentIndex.value = initialSegment
+    if (opts?.readId !== undefined) currentReadId.value = opts.readId
+    if (opts?.readTitle !== undefined) currentReadTitle.value = opts.readTitle
+    if (opts?.initialSegment !== undefined && opts.initialSegment > 0 && segs.length) {
+      currentSegmentIndex.value = opts.initialSegment
     }
   }
 
@@ -128,6 +148,28 @@ export function useAudioPlayer() {
     duration.value = 0
   }
 
+  const hasEstimates = computed(() =>
+    segments.value.some(seg => !segmentDurations.has(seg.segment_index)),
+  )
+
+  const totalDuration = computed(() =>
+    segments.value.reduce((sum, seg) => sum + estimateSegmentDuration(seg), 0),
+  )
+
+  const elapsedTime = computed(() => {
+    let elapsed = 0
+    for (let i = 0; i < currentSegmentIndex.value; i++) {
+      elapsed += estimateSegmentDuration(segments.value[i])
+    }
+    elapsed += currentTime.value
+    return elapsed
+  })
+
+  const remainingTime = computed(() => {
+    const raw = totalDuration.value - elapsedTime.value
+    return Math.max(0, raw / playbackRate.value)
+  })
+
   return {
     isPlaying: readonly(isPlaying),
     currentTime: readonly(currentTime),
@@ -135,6 +177,12 @@ export function useAudioPlayer() {
     playbackRate: readonly(playbackRate),
     currentSegmentIndex: readonly(currentSegmentIndex),
     segments: readonly(segments),
+    currentReadId: readonly(currentReadId),
+    currentReadTitle: readonly(currentReadTitle),
+    hasEstimates,
+    totalDuration,
+    elapsedTime,
+    remainingTime,
     setSegments,
     playSegment,
     play,
