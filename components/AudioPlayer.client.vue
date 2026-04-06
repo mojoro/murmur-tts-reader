@@ -42,15 +42,19 @@
         @click="skipNext"
       />
 
-      <!-- Progress bar -->
+      <!-- Scrubber -->
       <div class="flex-1 flex items-center gap-2">
         <span class="text-xs text-neutral-500 tabular-nums w-10 text-right">
           {{ formatTime(elapsedTime) }}
         </span>
-        <UProgress
-          :model-value="totalDuration > 0 ? (elapsedTime / totalDuration) * 100 : 0"
-          size="xs"
-          class="flex-1"
+        <input
+          type="range"
+          min="0"
+          :max="totalDuration"
+          step="0.1"
+          :value="elapsedTime"
+          class="flex-1 h-1 accent-primary-500 cursor-pointer"
+          @input="handleScrub"
         />
         <span class="text-xs text-neutral-500 tabular-nums w-10">
           {{ formatTime(totalDuration) }}
@@ -89,8 +93,14 @@ const {
   togglePlayPause,
   skipPrev,
   skipNext,
+  seekToGlobal,
   setRate,
 } = useAudioPlayer()
+
+function handleScrub(e: Event) {
+  const value = parseFloat((e.target as HTMLInputElement).value)
+  seekToGlobal(value)
+}
 
 const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 

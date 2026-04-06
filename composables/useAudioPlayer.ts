@@ -17,7 +17,7 @@ const currentSegmentIndex = ref(0)
 const segments = ref<AudioSegment[]>([])
 const currentReadId = ref<number | null>(null)
 const currentReadTitle = ref('')
-const segmentDurations = new Map<number, number>()
+const segmentDurations = reactive(new Map<number, number>())
 
 let audio: HTMLAudioElement | null = null
 
@@ -65,7 +65,7 @@ function estimateSegmentDuration(seg: AudioSegment): number {
   return (wordCount / WORDS_PER_MINUTE) * 60
 }
 
-async function playSegment(index: number) {
+async function playSegment(index: number, startOffset?: number) {
   if (!import.meta.client) return
   const segment = segments.value[index]
   if (!segment?.audio_generated) return
@@ -77,6 +77,19 @@ async function playSegment(index: number) {
   el.src = url
   el.defaultPlaybackRate = playbackRate.value
   el.playbackRate = playbackRate.value
+
+  // If seeking into the segment, wait for metadata so the seek sticks before play
+  if (startOffset && startOffset > 0) {
+    await new Promise<void>((resolve) => {
+      const handler = () => {
+        el.removeEventListener('loadedmetadata', handler)
+        el.currentTime = startOffset
+        resolve()
+      }
+      el.addEventListener('loadedmetadata', handler)
+    })
+  }
+
   await el.play()
 }
 
@@ -122,6 +135,27 @@ export function useAudioPlayer() {
     }
     if (import.meta.client) {
       localStorage.setItem(RATE_STORAGE_KEY, String(rate))
+    }
+  }
+
+  function seekToGlobal(globalTime: number) {
+    if (!import.meta.client || segments.value.length === 0) return
+    let accumulated = 0
+    let targetIndex = segments.value.length - 1
+    let offset = 0
+    for (let i = 0; i < segments.value.length; i++) {
+      const segDur = estimateSegmentDuration(segments.value[i])
+      if (globalTime <= accumulated + segDur) {
+        targetIndex = i
+        offset = globalTime - accumulated
+        break
+      }
+      accumulated += segDur
+    }
+    if (targetIndex === currentSegmentIndex.value) {
+      seek(offset)
+    } else if (segments.value[targetIndex].audio_generated) {
+      playSegment(targetIndex, offset)
     }
   }
 
@@ -189,6 +223,7 @@ export function useAudioPlayer() {
     pause,
     togglePlayPause,
     seek,
+    seekToGlobal,
     setRate,
     skipPrev,
     skipNext,
