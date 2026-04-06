@@ -24,31 +24,34 @@ async def list_voices(user_id: int = Depends(get_current_user_id), db: aiosqlite
     return [VoiceResponse(**dict(r)) for r in rows]
 
 
-@router.post("/sync", response_model=list[VoiceResponse])
-async def sync_voices(user_id: int = Depends(get_current_user_id), db: aiosqlite.Connection = Depends(get_db)):
-    """Fetch voices from the active TTS engine and upsert into DB."""
+async def sync_builtin_voices(db: aiosqlite.Connection) -> None:
+    """Fetch builtin voices from the active engine and replace stale ones in DB."""
     engine_url = engine_manager.get_engine_url()
     if not engine_url:
-        logger.warning("Voice sync failed: no engine running (user=%d)", user_id)
-        raise HTTPException(status_code=503, detail="No TTS engine running")
+        return
 
-    logger.info("Syncing voices from engine at %s (user=%d)", engine_url, user_id)
+    logger.info("Syncing builtin voices from engine at %s", engine_url)
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(f"{engine_url}/tts/voices", timeout=10)
             resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = e.response.text[:500] if e.response else ""
-            logger.error("Voice sync failed: engine returned %d: %s", e.response.status_code, body)
-            raise HTTPException(status_code=503, detail=f"TTS engine error: {body or e}")
-        except httpx.ConnectError as e:
-            logger.error("Voice sync failed: cannot connect to engine at %s: %s", engine_url, e)
-            raise HTTPException(status_code=503, detail=f"Cannot reach TTS engine: {e}")
+        except (httpx.HTTPStatusError, httpx.ConnectError) as e:
+            logger.error("Voice sync failed: %s", e)
+            return
 
     data = resp.json()
     builtin = data.get("builtin", [])
-    custom = data.get("custom", [])
-    logger.info("Engine returned %d builtin, %d custom voices", len(builtin), len(custom))
+    logger.info("Engine returned %d builtin voices", len(builtin))
+
+    if builtin:
+        placeholders = ",".join("?" for _ in builtin)
+        await db.execute(
+            f"DELETE FROM voices WHERE user_id IS NULL AND type = 'builtin' AND name NOT IN ({placeholders})",
+            builtin,
+        )
+    else:
+        await db.execute("DELETE FROM voices WHERE user_id IS NULL AND type = 'builtin'")
+
     for voice_name in builtin:
         existing = await db.execute_fetchall(
             "SELECT id FROM voices WHERE user_id IS NULL AND name = ?", (voice_name,)
@@ -58,6 +61,17 @@ async def sync_voices(user_id: int = Depends(get_current_user_id), db: aiosqlite
                 "INSERT INTO voices (user_id, name, type) VALUES (NULL, ?, 'builtin')", (voice_name,)
             )
     await db.commit()
+
+
+@router.post("/sync", response_model=list[VoiceResponse])
+async def sync_voices(user_id: int = Depends(get_current_user_id), db: aiosqlite.Connection = Depends(get_db)):
+    """Fetch voices from the active TTS engine and upsert into DB."""
+    engine_url = engine_manager.get_engine_url()
+    if not engine_url:
+        logger.warning("Voice sync failed: no engine running (user=%d)", user_id)
+        raise HTTPException(status_code=503, detail="No TTS engine running")
+
+    await sync_builtin_voices(db)
 
     rows = await db.execute_fetchall(
         "SELECT * FROM voices WHERE user_id IS NULL OR user_id = ? ORDER BY type, name",
