@@ -1,49 +1,11 @@
 <template>
   <div
     v-if="segments.length > 0"
-    class="fixed bottom-0 left-0 right-0 z-50 border-t border-neutral-200 dark:border-neutral-800 backdrop-blur-lg bg-white/80 dark:bg-neutral-950/80 px-4 py-3"
+    class="fixed bottom-0 left-0 right-0 z-50 border-t border-neutral-200 dark:border-neutral-800 backdrop-blur-lg bg-white/80 dark:bg-neutral-950/80 px-4 py-2"
   >
-    <div class="max-w-3xl mx-auto flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
-      <!-- Read title -->
-      <NuxtLink
-        v-if="currentReadId"
-        :to="`/read/${currentReadId}`"
-        class="text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate max-w-[120px] sm:max-w-[180px] hover:text-primary-500"
-      >
-        {{ currentReadTitle }}
-      </NuxtLink>
-
-      <!-- Skip prev -->
-      <UButton
-        icon="i-lucide-skip-back"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :disabled="currentSegmentIndex <= 0"
-        @click="skipPrev"
-      />
-
-      <!-- Play/Pause -->
-      <UButton
-        :icon="isPlaying ? 'i-lucide-pause' : 'i-lucide-play'"
-        variant="solid"
-        color="primary"
-        size="sm"
-        @click="togglePlayPause"
-      />
-
-      <!-- Skip next -->
-      <UButton
-        icon="i-lucide-skip-forward"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :disabled="currentSegmentIndex >= segments.length - 1"
-        @click="skipNext"
-      />
-
-      <!-- Scrubber -->
-      <div class="flex-1 flex items-center gap-2">
+    <div class="max-w-3xl mx-auto flex flex-col gap-1">
+      <!-- Scrubber row -->
+      <div class="flex items-center gap-2">
         <span class="text-xs text-neutral-500 tabular-nums w-10 text-right">
           {{ formatTime(elapsedTime) }}
         </span>
@@ -56,24 +18,59 @@
           class="flex-1 h-1 accent-primary-500 cursor-pointer"
           @input="handleScrub"
         />
-        <span class="text-xs text-neutral-500 tabular-nums w-10">
-          {{ formatTime(totalDuration) }}
+        <span class="text-xs text-neutral-500 tabular-nums w-14">
+          -{{ formatTime(remainingTime) }}
         </span>
       </div>
 
-      <!-- Speed control -->
-      <UDropdownMenu :items="speedItems">
-        <UButton variant="ghost" color="neutral" size="sm">
-          {{ playbackRate }}x
-        </UButton>
-      </UDropdownMenu>
-    </div>
+      <!-- Controls row -->
+      <div class="flex items-center justify-center gap-1">
+        <!-- Read title (left-aligned, hidden on very small screens) -->
+        <NuxtLink
+          v-if="currentReadId"
+          :to="`/read/${currentReadId}`"
+          class="hidden sm:block text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate max-w-[160px] hover:text-primary-500 mr-auto"
+        >
+          {{ currentReadTitle }}
+        </NuxtLink>
 
-    <!-- Time remaining -->
-    <div class="max-w-3xl mx-auto mt-1">
-      <p class="text-xs text-neutral-500 truncate">
-        {{ hasEstimates ? '~' : '' }}{{ formatRemaining(remainingTime) }}
-      </p>
+        <UButton
+          icon="i-lucide-skip-back"
+          variant="ghost"
+          color="neutral"
+          size="xs"
+          :disabled="currentSegmentIndex <= 0"
+          @click="skipPrev"
+        />
+
+        <UButton
+          :icon="isPlaying ? 'i-lucide-pause' : 'i-lucide-play'"
+          variant="solid"
+          color="primary"
+          size="sm"
+          @click="togglePlayPause"
+        />
+
+        <UButton
+          icon="i-lucide-skip-forward"
+          variant="ghost"
+          color="neutral"
+          size="xs"
+          :disabled="currentSegmentIndex >= segments.length - 1"
+          @click="skipNext"
+        />
+
+        <UDropdownMenu :items="speedItems">
+          <UButton variant="ghost" color="neutral" size="xs" class="tabular-nums">
+            {{ playbackRate }}x
+          </UButton>
+        </UDropdownMenu>
+
+        <!-- Remaining time label (right-aligned) -->
+        <span class="hidden sm:block text-xs text-neutral-500 ml-auto">
+          {{ hasEstimates ? '~' : '' }}{{ formatRemaining(remainingTime) }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
