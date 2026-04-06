@@ -1,6 +1,10 @@
 import type { Job } from '~/types/api'
 
-export function useGeneration(readId: Ref<number>) {
+interface GenerationOptions {
+  onSegmentDone?: (segmentIndex: number) => void
+}
+
+export function useGeneration(readId: Ref<number>, options: GenerationOptions = {}) {
   const job = ref<Job | null>(null)
   const generating = computed(() =>
     job.value?.status === 'pending' || job.value?.status === 'running',
@@ -30,6 +34,7 @@ export function useGeneration(readId: Ref<number>) {
       const data = JSON.parse(e.data)
       if (data.jobId === job.value?.id) {
         job.value = { ...job.value!, progress: data.segment, status: 'running' }
+        options.onSegmentDone?.(data.segment - 1)
       }
     })
 

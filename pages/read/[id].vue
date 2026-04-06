@@ -116,11 +116,15 @@ const { data: readData, refresh: refreshRead } = useFetch<ReadDetail>(
 // Voices
 const { selectedVoice } = useVoices()
 
-// Generation
-const { generating, progress, total, error: genError, generate, cancel } = useGeneration(id)
-
 // Audio player
 const { setSegments, currentSegmentIndex } = useAudioPlayer()
+
+// Generation — refresh segments as each one completes
+const { generating, progress, total, error: genError, generate, cancel } = useGeneration(id, {
+  onSegmentDone: async () => {
+    await refreshRead()
+  },
+})
 
 // Bookmarks
 const { bookmarks: bookmarkList, addBookmark, deleteBookmark } = useBookmarks(id)
@@ -141,7 +145,7 @@ watch(readData, (data) => {
   }
 }, { immediate: true })
 
-// Refresh read data when generation completes (to get updated segments with audio)
+// Final refresh when generation completes (catches the last segment)
 watch(generating, async (isGenerating, wasGenerating) => {
   if (wasGenerating && !isGenerating) {
     await refreshRead()
