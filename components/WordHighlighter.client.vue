@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WordTiming } from '~/types/tts'
+import type { WordTiming } from '~/types/api'
 
 const props = defineProps<{
   words: WordTiming[]
