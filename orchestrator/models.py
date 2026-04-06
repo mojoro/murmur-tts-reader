@@ -133,6 +133,7 @@ class SelectBackendRequest(BaseModel):
 class GenerateRequest(BaseModel):
     voice: str
     language: str | None = None
+    regenerate: bool = False
 
 class JobResponse(BaseModel):
     id: int

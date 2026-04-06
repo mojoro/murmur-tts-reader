@@ -144,6 +144,18 @@ async def generate_audio(
         logger.warning("Generate rejected: active job already exists for read=%d", read_id)
         raise HTTPException(status_code=409, detail="A job is already active for this read")
 
+    # Reset all segments if regenerating
+    if req.regenerate:
+        await db.execute(
+            "UPDATE audio_segments SET audio_generated = 0, word_timings_json = NULL, generated_at = NULL WHERE read_id = ?",
+            (read_id,),
+        )
+        await db.commit()
+        audio_dir = config.AUDIO_DIR / str(read_id)
+        if audio_dir.exists():
+            shutil.rmtree(audio_dir)
+        logger.info("Reset audio for regeneration: read=%d (user=%d)", read_id, user_id)
+
     # Count ungenerated segments
     seg_rows = await db.execute_fetchall(
         "SELECT COUNT(*) as cnt FROM audio_segments WHERE read_id = ? AND audio_generated = 0",
