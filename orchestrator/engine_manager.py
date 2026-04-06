@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import shutil
 from enum import Enum
 from pathlib import Path
 
@@ -10,6 +12,11 @@ import orchestrator.config as config
 from orchestrator.engine_registry import ENGINES, get_engine
 
 logger = logging.getLogger(__name__)
+
+
+def _has_cuda() -> bool:
+    """Detect whether CUDA is available on this host."""
+    return shutil.which("nvidia-smi") is not None
 
 
 class EngineStatus(str, Enum):
@@ -94,15 +101,22 @@ class EngineManager:
             cmd = ["uv", "run", "uvicorn", "main:app"]
             logger.info("Using uv run uvicorn (no venv found at %s)", venv_uvicorn)
 
+        # Inherit env + auto-accept license prompts that block on stdin
+        env = {
+            **os.environ,
+            "COQUI_TOS_AGREED": "1",
+            "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
+        }
+
         logger.info("Launching: %s --host 0.0.0.0 --port %d (cwd=%s)", " ".join(cmd), config.ENGINE_PORT, engine_dir)
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             "--host", "0.0.0.0",
             "--port", str(config.ENGINE_PORT),
             cwd=str(engine_dir),
+            env=env,
         )
         self._active_engine = name
-        self._statuses[name] = EngineStatus.RUNNING
 
         healthy = await self._wait_for_healthy(timeout=120)
         if not healthy:
@@ -113,6 +127,7 @@ class EngineManager:
             return False
 
         logger.info("Engine %s is healthy on port %d", name, config.ENGINE_PORT)
+        self._statuses[name] = EngineStatus.RUNNING
         self._start_health_loop()
         await self._emit_event("backend:status", {"name": name, "status": "running"})
         return True
@@ -235,11 +250,16 @@ class EngineManager:
 
             venv_python = str(engine_dir / ".venv" / "bin" / "python")
 
-            # Install CPU-only torch first
-            logger.info("Installing CPU torch for %s", name)
+            # Install torch stack — use CUDA index if GPU detected, CPU-only otherwise
+            # Pin torchaudio<2.6 to avoid torchcodec dependency
+            cuda = _has_cuda()
+            torch_args = ["torch", "torchaudio<2.6"]
+            if not cuda:
+                torch_args += ["--index-url", "https://download.pytorch.org/whl/cpu"]
+            logger.info("Installing %s torch stack for %s", "CUDA" if cuda else "CPU", name)
             proc = await asyncio.create_subprocess_exec(
                 "uv", "pip", "install", "--python", venv_python,
-                "torch", "--index-url", "https://download.pytorch.org/whl/cpu",
+                *torch_args,
                 cwd=str(engine_dir),
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
@@ -247,6 +267,9 @@ class EngineManager:
             if proc.returncode != 0:
                 stderr = await proc.stderr.read()
                 logger.error("Torch install failed for %s: %s", name, stderr.decode())
+                self._statuses[name] = EngineStatus.AVAILABLE
+                await self._emit_event("backend:status", {"name": name, "status": "available"})
+                return False
 
             # Install remaining deps from pyproject.toml
             logger.info("Installing dependencies for %s", name)
@@ -264,6 +287,16 @@ class EngineManager:
                 await self._emit_event("backend:status", {"name": name, "status": "available"})
                 return False
 
+            # Remove torchcodec if it was pulled in — its CUDA native libs
+            # won't load on CPU-only containers, and transformers/torchaudio
+            # fall back to ffmpeg without it
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "pip", "uninstall", "--python", venv_python, "torchcodec",
+                cwd=str(engine_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.wait()
+
             # Install uvicorn explicitly (may not be in deps)
             proc = await asyncio.create_subprocess_exec(
                 "uv", "pip", "install", "--python", venv_python, "uvicorn[standard]",
@@ -271,6 +304,33 @@ class EngineManager:
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             await proc.wait()
+            if proc.returncode != 0:
+                stderr = await proc.stderr.read()
+                logger.error("Uvicorn install failed for %s: %s", name, stderr.decode())
+                self._statuses[name] = EngineStatus.AVAILABLE
+                await self._emit_event("backend:status", {"name": name, "status": "available"})
+                return False
+
+            # Run post_install.py if it exists (e.g. model download)
+            post_install = engine_dir / "post_install.py"
+            if post_install.exists():
+                logger.info("Running post-install for %s", name)
+                env = {
+                    **os.environ,
+                    "COQUI_TOS_AGREED": "1",
+                    "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
+                }
+                proc = await asyncio.create_subprocess_exec(
+                    venv_python, str(post_install),
+                    cwd=str(engine_dir),
+                    env=env,
+                )
+                await proc.wait()
+                if proc.returncode != 0:
+                    logger.error("Post-install failed for %s (exit code %d)", name, proc.returncode)
+                    self._statuses[name] = EngineStatus.AVAILABLE
+                    await self._emit_event("backend:status", {"name": name, "status": "available"})
+                    return False
 
             self._statuses[name] = EngineStatus.INSTALLED
             await self._emit_event("backend:status", {"name": name, "status": "installed"})
@@ -282,6 +342,30 @@ class EngineManager:
             self._statuses[name] = EngineStatus.AVAILABLE
             await self._emit_event("backend:status", {"name": name, "status": "available"})
             return False
+
+    async def uninstall_engine(self, name: str) -> bool:
+        """Remove an engine's venv and downloaded model files."""
+        get_engine(name)
+
+        # Stop if this engine is currently running
+        if self._active_engine == name:
+            await self.stop_engine()
+
+        engine_dir = self._engine_dir(name)
+        venv_dir = engine_dir / ".venv"
+        if not venv_dir.exists():
+            logger.info("Engine %s has no venv to remove", name)
+            self._statuses[name] = EngineStatus.AVAILABLE
+            await self._emit_event("backend:status", {"name": name, "status": "available"})
+            return True
+
+        logger.info("Removing venv for %s at %s", name, venv_dir)
+        shutil.rmtree(venv_dir, ignore_errors=True)
+
+        self._statuses[name] = EngineStatus.AVAILABLE
+        await self._emit_event("backend:status", {"name": name, "status": "available"})
+        logger.info("Engine %s uninstalled", name)
+        return True
 
     async def shutdown(self):
         await self.stop_engine()
