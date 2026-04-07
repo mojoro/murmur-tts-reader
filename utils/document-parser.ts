@@ -33,7 +33,7 @@ export async function parseDocument(file: File): Promise<ParsedDocument> {
     case 'pdf':
       return { title: baseName, ...(await parsePdf(file)) }
     case 'docx':
-      return { title: baseName, content: await parseDocx(file) }
+      return { title: baseName, ...(await parseDocx(file)) }
     case 'epub':
       return { title: baseName, ...(await parseEpub(file)) }
     default:
@@ -77,26 +77,29 @@ function parseMarkdown(md: string): string {
     .trim()
 }
 
-async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob }> {
+async function renderPageToBlob(
+  page: pdfjsLib.PDFPageProxy,
+  maxDimension: number,
+  quality: number,
+): Promise<Blob | undefined> {
+  const viewport = page.getViewport({ scale: 1 })
+  const scale = maxDimension / Math.max(viewport.width, viewport.height)
+  const scaledViewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  canvas.width = scaledViewport.width
+  canvas.height = scaledViewport.height
+  await page.render({ canvasContext: canvas.getContext('2d')!, viewport: scaledViewport }).promise
+  return new Promise<Blob | undefined>(resolve =>
+    canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', quality),
+  )
+}
+
+async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob; images?: ExtractedImage[] }> {
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-  const pages: string[] = []
-
-  // Render first page as thumbnail
+  const contentParts: string[] = []
+  const images: ExtractedImage[] = []
   let thumbnail: Blob | undefined
-  try {
-    const firstPage = await pdf.getPage(1)
-    const viewport = firstPage.getViewport({ scale: 1 })
-    const scale = 300 / Math.max(viewport.width, viewport.height)
-    const scaledViewport = firstPage.getViewport({ scale })
-    const canvas = document.createElement('canvas')
-    canvas.width = scaledViewport.width
-    canvas.height = scaledViewport.height
-    await firstPage.render({ canvasContext: canvas.getContext('2d')!, viewport: scaledViewport }).promise
-    thumbnail = await new Promise<Blob | undefined>(resolve =>
-      canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', 0.8),
-    )
-  } catch {}
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
@@ -146,16 +149,125 @@ async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob
       }
     }
     paragraphs.push(para)
-    pages.push(paragraphs.join('\n\n'))
+
+    // Render page as inline image
+    try {
+      let pageBlob: Blob | undefined
+      if (i === 1) {
+        // First page: render at inline size and reuse as thumbnail
+        pageBlob = await renderPageToBlob(page, 800, 0.85)
+        if (pageBlob) {
+          thumbnail = pageBlob
+        }
+      } else {
+        pageBlob = await renderPageToBlob(page, 800, 0.85)
+      }
+      if (pageBlob) {
+        const imageIndex = images.length
+        images.push({ data: pageBlob, alt: `Page ${i}` })
+        contentParts.push(`[image:${imageIndex}]`)
+      }
+    } catch {}
+
+    contentParts.push(paragraphs.join('\n\n'))
   }
 
-  return { content: pages.join('\n\n'), thumbnail }
+  return {
+    content: contentParts.join('\n\n'),
+    thumbnail,
+    ...(images.length > 0 ? { images } : {}),
+  }
 }
 
-async function parseDocx(file: File): Promise<string> {
+async function parseDocx(file: File): Promise<{ content: string; images?: ExtractedImage[] }> {
   const arrayBuffer = await file.arrayBuffer()
-  const result = await mammoth.extractRawText({ arrayBuffer })
-  return result.value
+  const images: ExtractedImage[] = []
+
+  const result = await mammoth.convertToHtml(
+    { arrayBuffer },
+    {
+      convertImage: mammoth.images.imgElement(async (image) => {
+        const index = images.length
+        const buffer = await image.readAsArrayBuffer()
+        images.push({
+          data: new Blob([buffer], { type: image.contentType }),
+        })
+        return { src: `murmur-image:${index}` }
+      }),
+    },
+  )
+
+  const doc = new DOMParser().parseFromString(result.value, 'text/html')
+  const blocks: string[] = []
+
+  for (const node of Array.from(doc.body.childNodes)) {
+    extractBlocks(node, blocks)
+  }
+
+  const content = blocks.filter(b => b.length > 0).join('\n\n')
+  return { content, images: images.length > 0 ? images : undefined }
+}
+
+function extractBlocks(node: Node, blocks: string[]): void {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent?.trim()
+    if (text) blocks.push(text)
+    return
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) return
+
+  const el = node as Element
+  const tag = el.tagName.toLowerCase()
+
+  // Standalone image element
+  if (tag === 'img') {
+    const src = el.getAttribute('src') ?? ''
+    const match = src.match(/^murmur-image:(\d+)$/)
+    if (match) {
+      blocks.push(`[image:${match[1]}]`)
+    }
+    return
+  }
+
+  // Block-level elements
+  const blockTags = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'div', 'blockquote', 'tr', 'dt', 'dd'])
+  if (blockTags.has(tag)) {
+    const imgs = el.querySelectorAll('img[src^="murmur-image:"]')
+    if (imgs.length === 0) {
+      const text = el.textContent?.trim()
+      if (text) blocks.push(text)
+    } else {
+      // Walk children to separate text and image markers
+      for (const child of Array.from(el.childNodes)) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const text = child.textContent?.trim()
+          if (text) blocks.push(text)
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          const childEl = child as Element
+          if (childEl.tagName.toLowerCase() === 'img') {
+            const src = childEl.getAttribute('src') ?? ''
+            const m = src.match(/^murmur-image:(\d+)$/)
+            if (m) blocks.push(`[image:${m[1]}]`)
+          } else {
+            const nestedImgs = childEl.querySelectorAll('img[src^="murmur-image:"]')
+            if (nestedImgs.length === 0) {
+              const text = childEl.textContent?.trim()
+              if (text) blocks.push(text)
+            } else {
+              extractBlocks(childEl, blocks)
+            }
+          }
+        }
+      }
+    }
+    return
+  }
+
+  // Container elements (ul, ol, table, etc.) — recurse into children
+  for (const child of Array.from(el.childNodes)) {
+    extractBlocks(child, blocks)
+  }
 }
 
 async function parseEpub(file: File): Promise<ParsedDocument> {
@@ -219,7 +331,19 @@ async function parseEpub(file: File): Promise<ParsedDocument> {
     }
   }
 
-  const textParts: string[] = []
+  const contentParts: string[] = []
+  const images: ExtractedImage[] = []
+  const imgMimeMap: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+  }
+
+  const blockTags = new Set([
+    'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+    'DIV', 'BLOCKQUOTE', 'LI', 'DT', 'DD',
+    'FIGCAPTION', 'PRE', 'ADDRESS',
+  ])
+
   for (const itemref of spineItems) {
     const idref = itemref.getAttribute('idref')
     if (!idref) continue
@@ -230,17 +354,121 @@ async function parseEpub(file: File): Promise<ParsedDocument> {
     const htmlFile = zip.file(filePath)
     if (!htmlFile) continue
 
+    // Directory of this chapter file within the ZIP, for resolving relative image paths
+    const chapterDir = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/') + 1) : ''
+
     const html = await htmlFile.async('string')
     const doc = new DOMParser().parseFromString(html, 'application/xhtml+xml')
     // Remove style/script elements so their contents don't leak into text
     doc.querySelectorAll('style, script, link[rel="stylesheet"]').forEach(el => el.remove())
-    const text = doc.body?.textContent?.trim()
-    if (text) textParts.push(text)
+
+    const body = doc.body
+    if (!body) continue
+
+    const chapterParts: string[] = []
+
+    // Walk the body's descendant elements to find block elements and images in document order
+    const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT)
+    const visited = new Set<Node>()
+
+    let node: Node | null = walker.currentNode
+    while (node) {
+      if (visited.has(node)) {
+        node = walker.nextNode()
+        continue
+      }
+
+      const el = node as Element
+      const tagName = el.tagName?.toUpperCase()
+
+      // Handle standalone <img> tags (skip SVG images)
+      if (tagName === 'IMG') {
+        visited.add(node)
+        await extractEpubImage(el, chapterDir, zip, imgMimeMap, images, chapterParts)
+        node = walker.nextNode()
+        continue
+      }
+
+      // Handle block-level text elements
+      if (blockTags.has(tagName)) {
+        visited.add(node)
+        // Extract inline images inside this block element before adding its text
+        const childImgs = el.querySelectorAll('img')
+        for (const img of Array.from(childImgs)) {
+          visited.add(img)
+          await extractEpubImage(img, chapterDir, zip, imgMimeMap, images, chapterParts)
+        }
+        const text = el.textContent?.trim()
+        if (text) chapterParts.push(text)
+        node = walker.nextNode()
+        continue
+      }
+
+      node = walker.nextNode()
+    }
+
+    if (chapterParts.length > 0) {
+      contentParts.push(chapterParts.join('\n\n'))
+    }
   }
 
   return {
     title: title || file.name.replace(/\.epub$/i, ''),
-    content: textParts.join('\n\n'),
+    content: contentParts.join('\n\n'),
     thumbnail,
+    ...(images.length > 0 ? { images } : {}),
   }
+}
+
+/**
+ * Extract an image from an EPUB <img> element, read its data from the ZIP,
+ * and append an [image:N] marker. Skips SVG images.
+ */
+async function extractEpubImage(
+  img: Element,
+  chapterDir: string,
+  zip: JSZip,
+  mimeMap: Record<string, string>,
+  images: ExtractedImage[],
+  parts: string[],
+): Promise<void> {
+  const src = img.getAttribute('src')
+  if (!src || src.endsWith('.svg') || src.startsWith('data:image/svg')) return
+
+  const imgPath = resolveEpubImagePath(chapterDir, src)
+  const imgFile = zip.file(imgPath)
+  if (!imgFile) return
+
+  try {
+    const data = await imgFile.async('uint8array')
+    const ext = src.split('.').pop()?.toLowerCase()?.replace(/\?.*$/, '') ?? ''
+    const mimeType = mimeMap[ext] || 'image/jpeg'
+    const blob = new Blob([data], { type: mimeType })
+    const alt = img.getAttribute('alt') || undefined
+    const idx = images.length
+    images.push({ data: blob, alt })
+    parts.push(`[image:${idx}]`)
+  } catch {}
+}
+
+/**
+ * Resolve a relative image path against a chapter's directory within the EPUB ZIP.
+ * Handles `../` segments for paths like `../images/fig1.jpg` relative to `OEBPS/text/`.
+ */
+function resolveEpubImagePath(chapterDir: string, src: string): string {
+  // Strip any query string or fragment
+  const cleanSrc = src.split('?')[0].split('#')[0]
+
+  const baseParts = chapterDir.replace(/\/$/, '').split('/').filter(Boolean)
+  const srcParts = cleanSrc.split('/')
+
+  for (const part of srcParts) {
+    if (part === '..') {
+      baseParts.pop()
+    } else if (part !== '.' && part !== '') {
+      baseParts.push(part)
+    }
+  }
+
+  return baseParts.join('/')
 }
