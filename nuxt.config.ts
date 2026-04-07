@@ -60,8 +60,19 @@ export default defineNuxtConfig({
       navigateFallback: null,
       runtimeCaching: [
         {
-          // Cache audio files — immutable once generated
-          urlPattern: /\/api\/audio\/.+/,
+          // Cache SSR pages for offline navigation
+          urlPattern: /^https?:\/\/[^/]+\/(new|login|register|voices|settings|queue|read\/\d+)?(\?.*)?$/,
+          handler: 'NetworkFirst',
+          options: {
+            cacheName: 'pages',
+            networkTimeoutSeconds: 3,
+            expiration: { maxEntries: 100 },
+            cacheableResponse: { statuses: [200] },
+          },
+        },
+        {
+          // Cache individual audio segments (not bundle zips)
+          urlPattern: /\/api\/audio\/\d+\/\d+$/,
           handler: 'CacheFirst',
           options: {
             cacheName: 'audio-cache',

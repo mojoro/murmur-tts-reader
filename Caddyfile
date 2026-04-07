@@ -23,7 +23,22 @@ http://:80 {
 # HTTPS — main app
 https://{$MURMUR_HOST} {
 	tls internal
-	reverse_proxy app:3000 {
-		flush_interval -1
+
+	# SSE endpoints need immediate flushing for real-time events
+	handle /api/backends/events {
+		reverse_proxy app:3000 {
+			flush_interval -1
+		}
+	}
+	handle /api/queue/events {
+		reverse_proxy app:3000 {
+			flush_interval -1
+		}
+	}
+
+	# All other requests use default buffered flushing to avoid
+	# saturating WiFi TX queues on the host during bulk transfers
+	handle {
+		reverse_proxy app:3000
 	}
 }
