@@ -227,9 +227,9 @@ async function handleCreate() {
       file_name: activeMode.value === 'file' ? selectedFile.value?.name : undefined,
     })
 
-    // Upload thumbnail in background (don't block navigation)
+    // Upload thumbnail before navigating (navigation cancels in-flight requests)
     if (thumbnailBlob.value || thumbnailUrl.value) {
-      uploadThumbnail(result.id, thumbnailBlob.value, thumbnailUrl.value).catch(() => {})
+      await uploadThumbnail(result.id, thumbnailBlob.value, thumbnailUrl.value).catch(() => {})
     }
 
     toast.add({ title: 'Read created', color: 'success' })
