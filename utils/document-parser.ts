@@ -1,10 +1,18 @@
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import mammoth from 'mammoth'
 import JSZip from 'jszip'
 import { Readability } from '@mozilla/readability'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+type PdfJsLib = typeof import('pdfjs-dist')
+let _pdfjsLib: PdfJsLib | null = null
+
+async function getPdfJs(): Promise<PdfJsLib> {
+  if (!_pdfjsLib) {
+    _pdfjsLib = await import('pdfjs-dist')
+    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
+    _pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+  }
+  return _pdfjsLib
+}
 
 export interface ExtractedImage {
   data: Blob
@@ -121,6 +129,7 @@ async function pdfImageToBlob(
  * Returns images with their y-position for interleaving with text.
  */
 async function extractPageImages(
+  pdfjs: PdfJsLib,
   page: any,
   seenIds: Set<string>,
 ): Promise<{ data: Blob; y: number }[]> {
@@ -135,18 +144,18 @@ async function extractPageImages(
     const op = fnArray[i]
 
     // Track transforms for image positioning
-    if (op === pdfjsLib.OPS.transform || op === pdfjsLib.OPS.setTransform) {
+    if (op === pdfjs.OPS.transform || op === pdfjs.OPS.setTransform) {
       const args = argsArray[i]
       if (args && args.length >= 6) lastTransformY = args[5]
     }
 
-    if (op === pdfjsLib.OPS.paintImageXObject || op === pdfjsLib.OPS.paintImageXObjectRepeat) {
+    if (op === pdfjs.OPS.paintImageXObject || op === pdfjs.OPS.paintImageXObjectRepeat) {
       const objId = argsArray[i][0] as string
 
       // paintImageXObject args: [objId, width, height]
       // paintImageXObjectRepeat args: [objId, scaleX, scaleY, ...positions]
       // Only filter by size for paintImageXObject where args are pixel dimensions
-      if (op === pdfjsLib.OPS.paintImageXObject) {
+      if (op === pdfjs.OPS.paintImageXObject) {
         const pdfW = argsArray[i][1] as number
         const pdfH = argsArray[i][2] as number
         if (pdfW < MIN_IMAGE_DIM || pdfH < MIN_IMAGE_DIM) continue
@@ -167,7 +176,7 @@ async function extractPageImages(
       } catch {}
     }
 
-    if (op === pdfjsLib.OPS.paintInlineImageXObject) {
+    if (op === pdfjs.OPS.paintInlineImageXObject) {
       const imgData = argsArray[i][0]
       if (!imgData || imgData.width < MIN_IMAGE_DIM || imgData.height < MIN_IMAGE_DIM) continue
 
@@ -182,6 +191,7 @@ async function extractPageImages(
 }
 
 async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob; images?: ExtractedImage[] }> {
+  const pdfjsLib = await getPdfJs()
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const contentParts: string[] = []
@@ -257,7 +267,7 @@ async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob
     }
 
     // Extract individual images with y-positions
-    const pageImages = await extractPageImages(page, seenImageIds)
+    const pageImages = await extractPageImages(pdfjsLib, page, seenImageIds)
 
     // Interleave text and images by y-position (PDF y-axis: higher = top of page)
     type ContentItem = { kind: 'text'; text: string; y: number } | { kind: 'image'; blob: Blob; y: number }
