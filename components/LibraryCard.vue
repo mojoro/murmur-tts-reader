@@ -7,8 +7,10 @@
     <img
       v-if="showThumb"
       :src="`/api/thumbnails/${read.id}`"
-      :alt="read.title"
+      alt=""
       class="w-full h-32 object-cover"
+      :class="{ 'hidden': !thumbLoaded }"
+      @load="thumbLoaded = true"
       @error="showThumb = false"
     />
     <div class="flex flex-col gap-2 p-4">
@@ -78,6 +80,7 @@ const emit = defineEmits<{
 }>()
 
 const showThumb = ref(true)
+const thumbLoaded = ref(false)
 
 const readTimeLabel = computed(() => {
   const mins = Math.max(1, Math.round(props.read.segment_count * 15 / 200))
