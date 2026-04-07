@@ -8,8 +8,29 @@ ABBREVIATIONS = {
     "i.e", "e.g", "etc", "al", "cf",
 }
 
+IMAGE_MARKER_RE = re.compile(r"^\[image:\d+\]$")
+
 
 def split_sentences(text: str) -> list[str]:
+    sentences: list[str] = []
+
+    # Split on image markers first — they become standalone segments
+    parts = re.split(r"(\[image:\d+\])", text)
+
+    for part in parts:
+        stripped = part.strip()
+        if not stripped:
+            continue
+        if IMAGE_MARKER_RE.match(stripped):
+            sentences.append(stripped)
+            continue
+        # Split prose into sentences
+        sentences.extend(_split_prose(stripped))
+
+    return sentences
+
+
+def _split_prose(text: str) -> list[str]:
     sentences: list[str] = []
     current = ""
 

@@ -61,6 +61,7 @@ async def lifespan(app: FastAPI):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     config.THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
+    config.IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     await init_db()
     config.ENGINES_DIR.mkdir(parents=True, exist_ok=True)
     engine_manager.check_installed()
@@ -172,3 +173,67 @@ def _ext_from_content_type(ct: str) -> str:
         if mt == ct:
             return ext
     return ".jpg"
+
+
+IMAGE_MEDIA_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp",
+    ".gif": "image/gif", ".svg": "image/svg+xml",
+}
+
+
+@app.post("/reads/{read_id}/images", status_code=201)
+async def upload_read_image(read_id: int, request: Request):
+    """Upload an image for a read. Accepts multipart file or JSON {url, index}."""
+    content_type = request.headers.get("content-type", "")
+
+    if "multipart" in content_type:
+        form = await request.form()
+        file = form.get("file")
+        index = form.get("index", "0")
+        if not file:
+            raise HTTPException(status_code=400, detail="No file in form data")
+        data = await file.read()
+        ext = _ext_from_content_type(getattr(file, "content_type", None) or "image/jpeg")
+    elif "json" in content_type:
+        import httpx
+        body = await request.json()
+        url = body.get("url")
+        index = str(body.get("index", 0))
+        if not url:
+            raise HTTPException(status_code=400, detail="url required")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; Murmur/1.0)",
+                })
+                resp.raise_for_status()
+            data = resp.content
+            ext = _ext_from_content_type(resp.headers.get("content-type", "image/jpeg"))
+        except Exception as e:
+            logger.warning("Failed to download image from %s: %s", url, e)
+            raise HTTPException(status_code=502, detail="Failed to download image")
+    else:
+        raise HTTPException(status_code=400, detail="Send multipart file or JSON {url, index}")
+
+    img_dir = config.IMAGES_DIR / str(read_id)
+    img_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove any existing file for this index
+    for existing in img_dir.glob(f"{index}.*"):
+        existing.unlink()
+
+    path = img_dir / f"{index}{ext}"
+    path.write_bytes(data)
+    logger.info("Saved image %s for read=%d (%d bytes)", index, read_id, len(data))
+    return {"index": int(index)}
+
+
+@app.get("/images/{read_id}/{index}")
+async def serve_read_image(read_id: int, index: int):
+    img_dir = config.IMAGES_DIR / str(read_id)
+    for ext, media_type in IMAGE_MEDIA_TYPES.items():
+        path = img_dir / f"{index}{ext}"
+        if path.exists():
+            return FileResponse(path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="Image not found")

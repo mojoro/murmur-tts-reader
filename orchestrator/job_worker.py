@@ -185,6 +185,24 @@ class JobWorker:
         voice = job["voice"]
         language = job.get("language")
 
+        # Skip image-marker segments — no audio to generate
+        import re
+        if re.match(r"^\[image:\d+\]$", text):
+            async with open_db() as db:
+                await db.execute(
+                    """UPDATE audio_segments
+                       SET audio_generated = 1, generated_at = datetime('now')
+                       WHERE read_id = ? AND segment_index = ?""",
+                    (read_id, seg_index),
+                )
+                await db.execute(
+                    "UPDATE jobs SET progress = progress + 1 WHERE id = ?",
+                    (job["id"],),
+                )
+                await db.commit()
+            logger.info("Segment %d/%d: image marker, skipped TTS", seg_index, read_id)
+            return True
+
         engine_url = engine_manager.get_engine_url()
         if not engine_url:
             logger.error("Segment %d/%d: no engine URL available", seg_index, read_id)
