@@ -78,10 +78,52 @@ async function parsePdf(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const textContent = await page.getTextContent()
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(' ')
-    if (pageText.trim()) pages.push(pageText.trim())
+    const items = textContent.items.filter((item: any) => item.str !== undefined) as any[]
+    if (items.length === 0) continue
+
+    // Group items into lines using y-position
+    const lines: { text: string; y: number; height: number }[] = []
+    let lineText = ''
+    let lineY = 0
+    let lineHeight = 0
+
+    for (const item of items) {
+      const y = item.transform[5]
+      const h = item.height || Math.abs(item.transform[3])
+
+      if (!lineText) {
+        lineText = item.str
+        lineY = y
+        lineHeight = h
+      } else if (Math.abs(y - lineY) > h * 0.5) {
+        if (lineText.trim()) lines.push({ text: lineText.trim(), y: lineY, height: lineHeight })
+        lineText = item.str
+        lineY = y
+        lineHeight = h
+      } else {
+        lineText += item.str
+      }
+    }
+    if (lineText.trim()) lines.push({ text: lineText.trim(), y: lineY, height: lineHeight })
+    if (lines.length === 0) continue
+
+    // Merge lines into paragraphs based on vertical gaps
+    const paragraphs: string[] = []
+    let para = lines[0].text
+
+    for (let j = 1; j < lines.length; j++) {
+      const gap = Math.abs(lines[j - 1].y - lines[j].y)
+      const lineSpacing = lines[j - 1].height * 1.5
+
+      if (gap > lineSpacing * 1.8) {
+        paragraphs.push(para)
+        para = lines[j].text
+      } else {
+        para += ' ' + lines[j].text
+      }
+    }
+    paragraphs.push(para)
+    pages.push(paragraphs.join('\n\n'))
   }
 
   return pages.join('\n\n')
