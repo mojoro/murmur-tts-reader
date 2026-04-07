@@ -9,10 +9,27 @@ export function useBackends() {
 
   let eventSource: EventSource | null = null
 
-  function connectSSE() {
-    if (!import.meta.client) return
+  function openSSE() {
+    if (!import.meta.client || eventSource) return
     eventSource = new EventSource('/api/backends/events')
     eventSource.addEventListener('backend:status', () => refresh())
+    eventSource.onerror = () => {
+      closeSSE()
+    }
+  }
+
+  function closeSSE() {
+    eventSource?.close()
+    eventSource = null
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      closeSSE()
+    } else {
+      refresh()
+      openSSE()
+    }
   }
 
   async function selectBackend(name: string) {
@@ -29,10 +46,13 @@ export function useBackends() {
     await refresh()
   }
 
-  onMounted(connectSSE)
+  onMounted(() => {
+    openSSE()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  })
   onUnmounted(() => {
-    eventSource?.close()
-    eventSource = null
+    closeSSE()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
   })
 
   return {
