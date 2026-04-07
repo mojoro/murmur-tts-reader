@@ -104,6 +104,70 @@ app.include_router(backends_router)
 app.include_router(queue_router)
 
 
+@app.get("/audio/{read_id}/bundle")
+async def serve_audio_bundle(read_id: int, segments: str | None = None):
+    """Serve audio segments for a read as a single zip (ZIP_STORED).
+
+    If ``segments`` is provided (comma-separated indices), only those
+    segments are included.  Otherwise all generated segments are bundled.
+
+    The response is streamed in small chunks with pacing to avoid
+    saturating WiFi TX queues on the host — a known issue with some
+    WiFi chipsets (e.g. MediaTek MT7921) under sustained high throughput.
+    """
+    import asyncio
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+
+    audio_dir = config.AUDIO_DIR / str(read_id)
+    if not audio_dir.exists():
+        raise HTTPException(status_code=404, detail="No audio found")
+
+    if segments is not None:
+        requested = {int(s) for s in segments.split(",") if s.strip().isdigit()}
+        wav_files = [
+            audio_dir / f"{idx}.wav"
+            for idx in sorted(requested)
+            if (audio_dir / f"{idx}.wav").exists()
+        ]
+    else:
+        wav_files = sorted(audio_dir.glob("*.wav"), key=lambda p: int(p.stem))
+
+    if not wav_files:
+        raise HTTPException(status_code=404, detail="No audio found")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for wav_file in wav_files:
+            zf.write(wav_file, wav_file.name)
+    total_size = buf.tell()
+    buf.seek(0)
+
+    # Throttle to ~2 MB/s to avoid saturating WiFi TX queues.
+    # 64 KB chunks with 30ms sleep = ~2.1 MB/s sustained throughput.
+    # A 100 MB zip completes in ~48s — acceptable for background sync.
+    CHUNK_SIZE = 64 * 1024  # 64 KB
+    CHUNK_DELAY = 0.030     # 30ms between chunks
+
+    async def throttled_chunks():
+        while True:
+            chunk = buf.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            yield chunk
+            await asyncio.sleep(CHUNK_DELAY)
+
+    return StreamingResponse(
+        throttled_chunks(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{read_id}-audio.zip"',
+            "Content-Length": str(total_size),
+        },
+    )
+
+
 @app.get("/audio/{read_id}/{segment_index}")
 async def serve_audio(read_id: int, segment_index: int):
     path = config.AUDIO_DIR / str(read_id) / f"{segment_index}.wav"
