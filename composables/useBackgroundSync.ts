@@ -6,11 +6,14 @@ const SYNC_SETTING_KEY = 'murmur-auto-sync-v2'
 const SYNC_INTERVAL_MS = 15 * 60 * 1000 // 15 minutes
 const AUDIO_CACHE_NAME = 'audio-cache'
 const DELAY_BETWEEN_READS_MS = 3000 // pause between syncing each read
-const BUNDLE_BATCH_SIZE = 30 // max segments per bundle request (avoids huge single zip)
+const BUNDLE_BATCH_SIZE = 30 // max segments per bundle request
 const DELAY_BETWEEN_BATCHES_MS = 1000 // pause between batches within a read
+const BUNDLE_TIMEOUT_MS = 120_000 // 2 minutes per bundle request
 
 const lastSyncAt = ref<number>(0)
 const syncing = ref(false)
+
+let abortController: AbortController | null = null
 
 export function useBackgroundSync() {
   const { isOnline } = useOffline()
@@ -28,7 +31,7 @@ export function useBackgroundSync() {
     }
   }
 
-  /** Build a Set of all paths currently in the audio cache (single API call). */
+  /** Build a Set of all paths currently in the audio cache. */
   async function getCachedAudioPaths(): Promise<Set<string>> {
     const cache = await caches.open(AUDIO_CACHE_NAME)
     const keys = await cache.keys()
@@ -36,9 +39,9 @@ export function useBackgroundSync() {
   }
 
   /** Download a bundle of specific segments and populate the SW cache. */
-  async function syncAudioBundle(readId: number, segmentIndices: number[]) {
+  async function syncAudioBundle(readId: number, segmentIndices: number[], signal: AbortSignal) {
     const query = segmentIndices.join(',')
-    const resp = await fetch(`/api/audio/${readId}/bundle?segments=${query}`)
+    const resp = await fetch(`/api/audio/${readId}/bundle?segments=${query}`, { signal })
     if (!resp.ok) return
 
     const blob = await resp.blob()
@@ -62,9 +65,14 @@ export function useBackgroundSync() {
     if (typeof window === 'undefined' || !isOnline.value || syncing.value) return
     syncing.value = true
 
+    // Cancel any previous sync still in flight
+    abortController?.abort()
+    abortController = new AbortController()
+    const { signal } = abortController
+
     try {
       // Warm the library page cache (SSR HTML for offline navigation)
-      await fetch('/')
+      await fetch('/', { signal })
 
       // Fetch reads list (warms SW cache for /api/reads)
       const reads = await $fetch<ReadSummary[]>('/api/reads')
@@ -73,10 +81,14 @@ export function useBackgroundSync() {
       const cached = await getCachedAudioPaths()
 
       for (const read of reads) {
-        if (!isOnline.value) break
+        if (signal.aborted || !isOnline.value) break
+
+        // Skip reads that are currently being generated (no generated_at yet,
+        // or generation is partial) — we'll pick them up on the next sync cycle
+        if (!read.generated_at) continue
 
         // Warm the read page cache (SSR HTML for offline navigation)
-        await fetch(`/read/${read.id}`)
+        await fetch(`/read/${read.id}`, { signal })
 
         // Fetch read detail + bookmarks (warms SW cache)
         const detail = await $fetch<ReadDetail>(`/api/reads/${read.id}`)
@@ -90,29 +102,42 @@ export function useBackgroundSync() {
 
         if (uncached.length === 0) continue
 
-        // Fetch missing segments in small batches to avoid one huge zip
-        // that can saturate WiFi TX queues and crash some chipsets
+        // Fetch missing segments in batches
         for (let i = 0; i < uncached.length; i += BUNDLE_BATCH_SIZE) {
-          if (!isOnline.value) break
+          if (signal.aborted || !isOnline.value) break
           const batch = uncached.slice(i, i + BUNDLE_BATCH_SIZE)
-          await syncAudioBundle(read.id, batch)
+
+          // Per-batch timeout so a single slow download doesn't block the whole sync
+          const batchController = new AbortController()
+          const timeout = setTimeout(() => batchController.abort(), BUNDLE_TIMEOUT_MS)
+          signal.addEventListener('abort', () => batchController.abort(), { once: true })
+
+          try {
+            await syncAudioBundle(read.id, batch, batchController.signal)
+          } catch (e) {
+            if (signal.aborted) break
+            // Skip this batch on timeout/error, continue with next
+          } finally {
+            clearTimeout(timeout)
+          }
+
           if (i + BUNDLE_BATCH_SIZE < uncached.length) {
             await new Promise((r) => setTimeout(r, DELAY_BETWEEN_BATCHES_MS))
           }
         }
 
         // Pause between reads to avoid saturating the network
-        if (isOnline.value) {
+        if (!signal.aborted && isOnline.value) {
           await new Promise((r) => setTimeout(r, DELAY_BETWEEN_READS_MS))
         }
       }
 
       // Voices list
-      await $fetch('/api/voices')
+      if (!signal.aborted) await $fetch('/api/voices')
 
       lastSyncAt.value = Date.now()
     } catch {
-      // Sync is best-effort; swallow errors (likely went offline)
+      // Sync is best-effort; swallow errors (likely went offline or was aborted)
     } finally {
       syncing.value = false
     }
@@ -144,6 +169,7 @@ export function useBackgroundSync() {
       clearInterval(intervalId)
       intervalId = undefined
     }
+    abortController?.abort()
   }
 
   return {
