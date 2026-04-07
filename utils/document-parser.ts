@@ -456,8 +456,8 @@ async function extractEpubImage(
  * Handles `../` segments for paths like `../images/fig1.jpg` relative to `OEBPS/text/`.
  */
 function resolveEpubImagePath(chapterDir: string, src: string): string {
-  // Strip any query string or fragment
-  const cleanSrc = src.split('?')[0].split('#')[0]
+  // Strip any query string or fragment, then decode URL-encoded characters
+  const cleanSrc = decodeURIComponent(src.split('?')[0].split('#')[0])
 
   const baseParts = chapterDir.replace(/\/$/, '').split('/').filter(Boolean)
   const srcParts = cleanSrc.split('/')
