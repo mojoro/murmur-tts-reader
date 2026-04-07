@@ -1,7 +1,5 @@
 import { Readability } from '@mozilla/readability'
 
-const CORS_PROXY = 'https://api.allorigins.win/raw?url='
-
 export interface ExtractedArticle {
   title: string
   content: string
@@ -10,11 +8,11 @@ export interface ExtractedArticle {
 }
 
 export async function extractArticle(url: string): Promise<ExtractedArticle> {
-  const proxyUrl = CORS_PROXY + encodeURIComponent(url)
-  const res = await fetch(proxyUrl)
-  if (!res.ok) throw new Error(`Failed to fetch URL (${res.status})`)
+  const { html } = await $fetch<{ html: string }>('/api/extract-url', {
+    method: 'POST',
+    body: { url },
+  })
 
-  const html = await res.text()
   const doc = new DOMParser().parseFromString(html, 'text/html')
 
   // Set the base URL so relative links resolve correctly
