@@ -5,8 +5,7 @@
       :key="segment.id"
       :ref="(el) => { if (el) segmentRefs[index] = el as HTMLElement }"
       class="py-2 px-3 rounded-lg transition-all duration-200"
-      :class="{ 'cursor-pointer': getImageIndex(segment) === null }"
-      :class="segmentClasses(index)"
+      :class="[segmentClasses(index), { 'cursor-pointer': getImageIndex(segment) === null }]"
       @click="handleClick(index)"
     >
       <img
