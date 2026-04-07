@@ -1,9 +1,17 @@
 <template>
   <UCard
-    class="group cursor-pointer hover:ring-1 hover:ring-primary-500/30 transition-all"
+    class="group cursor-pointer hover:ring-1 hover:ring-primary-500/30 transition-all overflow-hidden"
+    :ui="{ body: 'p-0' }"
     @click="navigateTo(`/read/${read.id}`)"
   >
-    <div class="flex flex-col gap-2">
+    <img
+      v-if="showThumb"
+      :src="`/api/thumbnails/${read.id}`"
+      :alt="read.title"
+      class="w-full h-32 object-cover"
+      @error="showThumb = false"
+    />
+    <div class="flex flex-col gap-2 p-4">
       <div class="flex items-start justify-between gap-2">
         <h3 class="font-semibold text-neutral-900 dark:text-neutral-50 truncate flex-1">
           {{ read.title }}
@@ -44,6 +52,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   delete: [id: number]
 }>()
+
+const showThumb = ref(true)
 
 const progressPercent = computed(() => {
   const progress = props.read.progress_segment ?? 0

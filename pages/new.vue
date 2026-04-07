@@ -136,6 +136,8 @@ const activeMode = ref('text')
 const selectedFile = ref<File | null>(null)
 const isDragging = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const thumbnailUrl = ref<string>()
+const thumbnailBlob = ref<Blob>()
 
 const inputModes = [
   { label: 'Text', slot: 'text' as const, value: 'text' },
@@ -155,10 +157,13 @@ async function handleFetchUrl() {
   fetchError.value = ''
   content.value = ''
   title.value = ''
+  thumbnailUrl.value = undefined
+  thumbnailBlob.value = undefined
   try {
     const article = await extractArticle(url.value.trim())
     title.value = article.title
     content.value = article.content
+    thumbnailUrl.value = article.thumbnailUrl
   } catch (e: any) {
     fetchError.value = e.message || 'Failed to extract content'
   } finally {
@@ -183,14 +188,27 @@ async function processFile(file: File) {
   fetchError.value = ''
   content.value = ''
   title.value = ''
+  thumbnailUrl.value = undefined
+  thumbnailBlob.value = undefined
   try {
     const parsed = await parseDocument(file)
     title.value = parsed.title
     content.value = parsed.content
+    thumbnailBlob.value = parsed.thumbnail
   } catch (e: any) {
     fetchError.value = e.message || 'Failed to parse document'
   } finally {
     fetching.value = false
+  }
+}
+
+async function uploadThumbnail(readId: number, blob?: Blob, url?: string) {
+  if (blob) {
+    const form = new FormData()
+    form.append('file', blob, 'thumbnail.jpg')
+    await $fetch(`/api/reads/${readId}/thumbnail`, { method: 'POST', body: form })
+  } else if (url) {
+    await $fetch(`/api/reads/${readId}/thumbnail`, { method: 'POST', body: { url } })
   }
 }
 
@@ -208,6 +226,12 @@ async function handleCreate() {
       source_url: activeMode.value === 'url' ? url.value.trim() : undefined,
       file_name: activeMode.value === 'file' ? selectedFile.value?.name : undefined,
     })
+
+    // Upload thumbnail in background (don't block navigation)
+    if (thumbnailBlob.value || thumbnailUrl.value) {
+      uploadThumbnail(result.id, thumbnailBlob.value, thumbnailUrl.value).catch(() => {})
+    }
+
     toast.add({ title: 'Read created', color: 'success' })
     await navigateTo(`/read/${result.id}?voice=${encodeURIComponent(selectedVoice.value)}`)
   } catch (e: any) {
