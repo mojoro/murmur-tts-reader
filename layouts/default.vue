@@ -25,7 +25,7 @@
     <!-- Main content area -->
     <div class="flex flex-1 flex-col overflow-hidden">
       <AppHeader @toggle-sidebar="sidebarOpen = !sidebarOpen" />
-      <main class="flex-1 overflow-y-auto p-4 lg:p-8">
+      <main class="flex-1 overflow-y-auto p-4 lg:p-8 pb-24">
         <slot />
       </main>
       <AudioPlayer />
