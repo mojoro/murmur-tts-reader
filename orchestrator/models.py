@@ -56,6 +56,9 @@ class ReadSummary(BaseModel):
     segment_count: int
     created_at: str
     updated_at: str
+    voice: str | None = None
+    engine: str | None = None
+    generated_at: str | None = None
 
 class ReadDetail(BaseModel):
     id: int
@@ -69,6 +72,9 @@ class ReadDetail(BaseModel):
     progress_word: int
     created_at: str
     updated_at: str
+    voice: str | None = None
+    engine: str | None = None
+    generated_at: str | None = None
     segments: list[SegmentResponse]
 
 

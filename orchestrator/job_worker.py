@@ -165,11 +165,15 @@ class JobWorker:
                 "segment": progress, "total": job["total"],
             })
 
-        # Mark done
+        # Mark done and stamp the read with voice/engine
         async with open_db() as db:
             await db.execute(
                 "UPDATE jobs SET status = 'done', completed_at = datetime('now') WHERE id = ?",
                 (job_id,),
+            )
+            await db.execute(
+                "UPDATE reads SET voice = ?, engine = ?, generated_at = datetime('now') WHERE id = ?",
+                (job["voice"], job["engine"], read_id),
             )
             await db.commit()
         logger.info("Job %d completed: all %d segments generated for read=%d", job_id, job["total"], read_id)

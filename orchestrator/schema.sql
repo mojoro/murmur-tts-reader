@@ -17,7 +17,10 @@ CREATE TABLE IF NOT EXISTS reads (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     progress_segment INTEGER NOT NULL DEFAULT 0,
-    progress_word INTEGER NOT NULL DEFAULT 0
+    progress_word INTEGER NOT NULL DEFAULT 0,
+    voice TEXT,
+    engine TEXT,
+    generated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audio_segments (
