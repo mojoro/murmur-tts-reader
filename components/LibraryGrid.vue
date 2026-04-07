@@ -29,7 +29,13 @@
     </div>
 
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <LibraryCard v-for="read in filteredReads" :key="read.id" :read="read" @delete="confirmDelete" />
+      <LibraryCard
+        v-for="read in filteredReads"
+        :key="read.id"
+        :read="read"
+        :job="activeJobFor(read.id)"
+        @delete="confirmDelete"
+      />
     </div>
 
     <UModal v-model:open="deleteModalOpen">
@@ -48,11 +54,12 @@
 </template>
 
 <script setup lang="ts">
-import type { ReadSummary } from '~/types/api'
+import type { ReadSummary, Job } from '~/types/api'
 
 const props = defineProps<{
   reads: ReadSummary[]
   loading: boolean
+  jobs?: Job[]
 }>()
 
 const emit = defineEmits<{
@@ -89,6 +96,12 @@ const filteredReads = computed(() => {
 
   return result
 })
+
+function activeJobFor(readId: number) {
+  return props.jobs?.find(
+    (j) => j.read_id === readId && (j.status === 'pending' || j.status === 'running'),
+  ) ?? null
+}
 
 function confirmDelete(id: number) {
   deleteTargetId.value = id
