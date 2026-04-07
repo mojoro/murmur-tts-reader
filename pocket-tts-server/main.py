@@ -94,8 +94,14 @@ def generate(req: GenerateRequest):
     state = get_voice_state(req.voice)
     audio = m.generate_audio(state, req.text)
 
+    audio_np = np.array(audio, dtype=np.float32)
+    peak = np.max(np.abs(audio_np))
+    if peak > 0:
+        audio_np = audio_np / peak
+    audio_int16 = np.int16(audio_np * 32767)
+
     buf = io.BytesIO()
-    wav.write(buf, 24000, np.array(audio))
+    wav.write(buf, 24000, audio_int16)
     buf.seek(0)
 
     return StreamingResponse(buf, media_type="audio/wav", headers={
