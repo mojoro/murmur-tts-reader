@@ -77,21 +77,108 @@ function parseMarkdown(md: string): string {
     .trim()
 }
 
-async function renderPageToBlob(
-  page: pdfjsLib.PDFPageProxy,
-  maxDimension: number,
-  quality: number,
+const MIN_IMAGE_DIM = 50
+
+/**
+ * Convert pdf.js image data (ImageBitmap or raw pixels) to a JPEG Blob.
+ */
+async function pdfImageToBlob(
+  imgData: { bitmap?: ImageBitmap; data?: Uint8Array | Uint8ClampedArray; width: number; height: number; kind?: number },
 ): Promise<Blob | undefined> {
-  const viewport = page.getViewport({ scale: 1 })
-  const scale = maxDimension / Math.max(viewport.width, viewport.height)
-  const scaledViewport = page.getViewport({ scale })
+  const { width, height } = imgData
   const canvas = document.createElement('canvas')
-  canvas.width = scaledViewport.width
-  canvas.height = scaledViewport.height
-  await page.render({ canvasContext: canvas.getContext('2d')!, viewport: scaledViewport }).promise
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')!
+
+  if (imgData.bitmap) {
+    ctx.drawImage(imgData.bitmap, 0, 0)
+  } else if (imgData.data) {
+    const kind = (imgData as any).kind
+    if (kind === 3 /* RGBA_32BPP */) {
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(imgData.data), width, height), 0, 0)
+    } else if (kind === 2 /* RGB_24BPP */) {
+      const id = ctx.createImageData(width, height)
+      const src = imgData.data
+      for (let j = 0, k = 0; j < src.length; j += 3, k += 4) {
+        id.data[k] = src[j]; id.data[k + 1] = src[j + 1]; id.data[k + 2] = src[j + 2]; id.data[k + 3] = 255
+      }
+      ctx.putImageData(id, 0, 0)
+    } else {
+      return undefined // skip 1bpp masks
+    }
+  } else {
+    return undefined
+  }
+
   return new Promise<Blob | undefined>(resolve =>
-    canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', quality),
+    canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', 0.85),
   )
+}
+
+/**
+ * Extract individual embedded images from a PDF page via the operator list.
+ * Returns images with their y-position for interleaving with text.
+ */
+async function extractPageImages(
+  page: any,
+  seenIds: Set<string>,
+): Promise<{ data: Blob; y: number }[]> {
+  const opList = await page.getOperatorList()
+  const { fnArray, argsArray } = opList
+  const results: { data: Blob; y: number }[] = []
+
+  // Track the last transform to get image y-position
+  let lastTransformY = 0
+
+  for (let i = 0; i < fnArray.length; i++) {
+    const op = fnArray[i]
+
+    // Track transforms for image positioning
+    if (op === pdfjsLib.OPS.transform || op === pdfjsLib.OPS.setTransform) {
+      const args = argsArray[i]
+      if (args && args.length >= 6) lastTransformY = args[5]
+    }
+
+    if (op === pdfjsLib.OPS.paintImageXObject || op === pdfjsLib.OPS.paintImageXObjectRepeat) {
+      const objId = argsArray[i][0] as string
+
+      // paintImageXObject args: [objId, width, height]
+      // paintImageXObjectRepeat args: [objId, scaleX, scaleY, ...positions]
+      // Only filter by size for paintImageXObject where args are pixel dimensions
+      if (op === pdfjsLib.OPS.paintImageXObject) {
+        const pdfW = argsArray[i][1] as number
+        const pdfH = argsArray[i][2] as number
+        if (pdfW < MIN_IMAGE_DIM || pdfH < MIN_IMAGE_DIM) continue
+      }
+
+      if (seenIds.has(objId)) continue
+      seenIds.add(objId)
+
+      try {
+        const imgData = objId.startsWith('g_')
+          ? page.commonObjs.get(objId)
+          : page.objs.get(objId)
+        if (!imgData) continue
+        if (imgData.width < MIN_IMAGE_DIM || imgData.height < MIN_IMAGE_DIM) continue
+
+        const blob = await pdfImageToBlob(imgData)
+        if (blob) results.push({ data: blob, y: lastTransformY })
+      } catch {}
+    }
+
+    if (op === pdfjsLib.OPS.paintInlineImageXObject) {
+      const imgData = argsArray[i][0]
+      if (!imgData || imgData.width < MIN_IMAGE_DIM || imgData.height < MIN_IMAGE_DIM) continue
+
+      try {
+        const blob = await pdfImageToBlob(imgData)
+        if (blob) results.push({ data: blob, y: lastTransformY })
+      } catch {}
+    }
+  }
+
+  return results
 }
 
 async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob; images?: ExtractedImage[] }> {
@@ -100,20 +187,36 @@ async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob
   const contentParts: string[] = []
   const images: ExtractedImage[] = []
   let thumbnail: Blob | undefined
+  const seenImageIds = new Set<string>()
+
+  // Render first page as thumbnail (small, separate from inline images)
+  try {
+    const firstPage = await pdf.getPage(1)
+    const vp = firstPage.getViewport({ scale: 1 })
+    const scale = 300 / Math.max(vp.width, vp.height)
+    const svp = firstPage.getViewport({ scale })
+    const canvas = document.createElement('canvas')
+    canvas.width = svp.width
+    canvas.height = svp.height
+    await firstPage.render({ canvasContext: canvas.getContext('2d')!, viewport: svp }).promise
+    thumbnail = await new Promise<Blob | undefined>(resolve =>
+      canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', 0.8),
+    )
+  } catch {}
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
-    const textContent = await page.getTextContent()
-    const items = textContent.items.filter((item: any) => item.str !== undefined) as any[]
-    if (items.length === 0) continue
 
-    // Group items into lines using y-position
+    // Extract text lines with y-positions
+    const textContent = await page.getTextContent()
+    const textItems = textContent.items.filter((item: any) => item.str !== undefined) as any[]
+
     const lines: { text: string; y: number; height: number }[] = []
     let lineText = ''
     let lineY = 0
     let lineHeight = 0
 
-    for (const item of items) {
+    for (const item of textItems) {
       const y = item.transform[5]
       const h = item.height || Math.abs(item.transform[3])
 
@@ -131,45 +234,48 @@ async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob
       }
     }
     if (lineText.trim()) lines.push({ text: lineText.trim(), y: lineY, height: lineHeight })
-    if (lines.length === 0) continue
 
-    // Merge lines into paragraphs based on vertical gaps
-    const paragraphs: string[] = []
-    let para = lines[0].text
+    // Merge lines into paragraphs with y-positions
+    const paragraphs: { text: string; y: number }[] = []
+    if (lines.length > 0) {
+      let paraText = lines[0].text
+      let paraY = lines[0].y
 
-    for (let j = 1; j < lines.length; j++) {
-      const gap = Math.abs(lines[j - 1].y - lines[j].y)
-      const lineSpacing = lines[j - 1].height * 1.5
+      for (let j = 1; j < lines.length; j++) {
+        const gap = Math.abs(lines[j - 1].y - lines[j].y)
+        const lineSpacing = lines[j - 1].height * 1.5
 
-      if (gap > lineSpacing * 1.8) {
-        paragraphs.push(para)
-        para = lines[j].text
+        if (gap > lineSpacing * 1.8) {
+          paragraphs.push({ text: paraText, y: paraY })
+          paraText = lines[j].text
+          paraY = lines[j].y
+        } else {
+          paraText += ' ' + lines[j].text
+        }
+      }
+      paragraphs.push({ text: paraText, y: paraY })
+    }
+
+    // Extract individual images with y-positions
+    const pageImages = await extractPageImages(page, seenImageIds)
+
+    // Interleave text and images by y-position (PDF y-axis: higher = top of page)
+    type ContentItem = { kind: 'text'; text: string; y: number } | { kind: 'image'; blob: Blob; y: number }
+    const merged: ContentItem[] = [
+      ...paragraphs.map(p => ({ kind: 'text' as const, text: p.text, y: p.y })),
+      ...pageImages.map(img => ({ kind: 'image' as const, blob: img.data, y: img.y })),
+    ]
+    merged.sort((a, b) => b.y - a.y) // top of page first
+
+    for (const item of merged) {
+      if (item.kind === 'image') {
+        const idx = images.length
+        images.push({ data: item.blob })
+        contentParts.push(`[image:${idx}]`)
       } else {
-        para += ' ' + lines[j].text
+        contentParts.push(item.text)
       }
     }
-    paragraphs.push(para)
-
-    // Render page as inline image
-    try {
-      let pageBlob: Blob | undefined
-      if (i === 1) {
-        // First page: render at inline size and reuse as thumbnail
-        pageBlob = await renderPageToBlob(page, 800, 0.85)
-        if (pageBlob) {
-          thumbnail = pageBlob
-        }
-      } else {
-        pageBlob = await renderPageToBlob(page, 800, 0.85)
-      }
-      if (pageBlob) {
-        const imageIndex = images.length
-        images.push({ data: pageBlob, alt: `Page ${i}` })
-        contentParts.push(`[image:${imageIndex}]`)
-      }
-    } catch {}
-
-    contentParts.push(paragraphs.join('\n\n'))
   }
 
   return {
