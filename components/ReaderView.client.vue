@@ -4,15 +4,18 @@
       v-for="(segment, index) in segments"
       :key="segment.id"
       :ref="(el) => { if (el) segmentRefs[index] = el as HTMLElement }"
-      class="py-2 px-3 rounded-lg cursor-pointer transition-all duration-200"
+      class="py-2 px-3 rounded-lg transition-all duration-200"
+      :class="{ 'cursor-pointer': getImageIndex(segment) === null }"
       :class="segmentClasses(index)"
       @click="handleClick(index)"
     >
       <img
         v-if="getImageIndex(segment) !== null"
         :src="`/api/images/${segment.read_id}/${getImageIndex(segment)}`"
+        alt=""
         class="max-w-full rounded-lg my-2"
         loading="lazy"
+        @error="($event.target as HTMLImageElement).style.display = 'none'"
       />
       <WordHighlighter
         v-else-if="getWordTimings(segment)"
@@ -64,7 +67,8 @@ function getWordTimings(segment: AudioSegment): WordTiming[] | null {
 }
 
 function handleClick(index: number) {
-  if (props.segments[index]?.audio_generated) {
+  const seg = props.segments[index]
+  if (seg?.audio_generated && getImageIndex(seg) === null) {
     playSegment(index)
   }
 }
