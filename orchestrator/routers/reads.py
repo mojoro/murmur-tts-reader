@@ -112,6 +112,8 @@ async def delete_read(
     audio_dir = config.AUDIO_DIR / str(read_id)
     if audio_dir.exists():
         shutil.rmtree(audio_dir)
+    for thumb in config.THUMBNAILS_DIR.glob(f"{read_id}.*"):
+        thumb.unlink()
     logger.info("Deleted read id=%d and audio dir (user=%d)", read_id, user_id)
 
 

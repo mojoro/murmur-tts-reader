@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -60,6 +60,7 @@ async def reset_stale_jobs():
 async def lifespan(app: FastAPI):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    config.THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
     await init_db()
     config.ENGINES_DIR.mkdir(parents=True, exist_ok=True)
     engine_manager.check_installed()
@@ -108,3 +109,62 @@ async def serve_audio(read_id: int, segment_index: int):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Audio not found")
     return FileResponse(path, media_type="audio/wav")
+
+
+THUMB_MEDIA_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
+}
+
+
+@app.post("/reads/{read_id}/thumbnail", status_code=204)
+async def upload_thumbnail(read_id: int, request: Request, file: UploadFile | None = None):
+    content_type = request.content_type or ""
+
+    if file and file.size:
+        data = await file.read()
+        ext = _ext_from_content_type(file.content_type or "image/jpeg")
+    elif "application/json" in content_type:
+        import httpx
+        body = await request.json()
+        url = body.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="url required")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; Murmur/1.0)",
+                })
+                resp.raise_for_status()
+            data = resp.content
+            ext = _ext_from_content_type(resp.headers.get("content-type", "image/jpeg"))
+        except Exception as e:
+            logger.warning("Failed to download thumbnail from %s: %s", url, e)
+            raise HTTPException(status_code=502, detail="Failed to download thumbnail")
+    else:
+        raise HTTPException(status_code=400, detail="Send file upload or JSON {url}")
+
+    # Remove any existing thumbnail for this read
+    for existing in config.THUMBNAILS_DIR.glob(f"{read_id}.*"):
+        existing.unlink()
+
+    path = config.THUMBNAILS_DIR / f"{read_id}{ext}"
+    path.write_bytes(data)
+    logger.info("Saved thumbnail for read=%d (%d bytes)", read_id, len(data))
+
+
+@app.get("/thumbnails/{read_id}")
+async def serve_thumbnail(read_id: int):
+    for ext, media_type in THUMB_MEDIA_TYPES.items():
+        path = config.THUMBNAILS_DIR / f"{read_id}{ext}"
+        if path.exists():
+            return FileResponse(path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="Thumbnail not found")
+
+
+def _ext_from_content_type(ct: str) -> str:
+    ct = ct.lower().split(";")[0].strip()
+    for ext, mt in THUMB_MEDIA_TYPES.items():
+        if mt == ct:
+            return ext
+    return ".jpg"
