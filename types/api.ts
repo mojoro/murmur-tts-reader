@@ -22,6 +22,9 @@ export interface ReadSummary {
   segment_count: number
   created_at: string
   updated_at: string
+  voice: string | null
+  engine: string | null
+  generated_at: string | null
 }
 
 export interface AudioSegment {
@@ -45,6 +48,9 @@ export interface ReadDetail {
   progress_word: number
   created_at: string
   updated_at: string
+  voice: string | null
+  engine: string | null
+  generated_at: string | null
   segments: AudioSegment[]
 }
 
