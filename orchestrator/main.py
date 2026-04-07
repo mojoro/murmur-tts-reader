@@ -182,6 +182,40 @@ IMAGE_MEDIA_TYPES = {
 }
 
 
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+def _validate_image_index(raw_index) -> int:
+    """Validate index is a non-negative integer to prevent path traversal."""
+    try:
+        idx = int(raw_index)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="index must be an integer")
+    if idx < 0 or idx > 9999:
+        raise HTTPException(status_code=400, detail="index out of range")
+    return idx
+
+
+def _validate_external_url(url: str):
+    """Block SSRF: reject private/internal URLs."""
+    import ipaddress
+    from urllib.parse import urlparse
+    import socket
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Only http/https URLs allowed")
+    hostname = parsed.hostname or ""
+    if not hostname or hostname == "localhost":
+        raise HTTPException(status_code=400, detail="Internal URLs not allowed")
+    try:
+        for info in socket.getaddrinfo(hostname, None):
+            addr = ipaddress.ip_address(info[4][0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local:
+                raise HTTPException(status_code=400, detail="Internal URLs not allowed")
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Cannot resolve hostname")
+
+
 @app.post("/reads/{read_id}/images", status_code=201)
 async def upload_read_image(read_id: int, request: Request):
     """Upload an image for a read. Accepts multipart file or JSON {url, index}."""
@@ -190,18 +224,21 @@ async def upload_read_image(read_id: int, request: Request):
     if "multipart" in content_type:
         form = await request.form()
         file = form.get("file")
-        index = form.get("index", "0")
+        index = _validate_image_index(form.get("index", "0"))
         if not file:
             raise HTTPException(status_code=400, detail="No file in form data")
         data = await file.read()
+        if len(data) > MAX_IMAGE_SIZE:
+            raise HTTPException(status_code=413, detail="Image too large (max 10MB)")
         ext = _ext_from_content_type(getattr(file, "content_type", None) or "image/jpeg")
     elif "json" in content_type:
         import httpx
         body = await request.json()
         url = body.get("url")
-        index = str(body.get("index", 0))
+        index = _validate_image_index(body.get("index", 0))
         if not url:
             raise HTTPException(status_code=400, detail="url required")
+        _validate_external_url(url)
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
                 resp = await client.get(url, headers={
@@ -209,7 +246,11 @@ async def upload_read_image(read_id: int, request: Request):
                 })
                 resp.raise_for_status()
             data = resp.content
+            if len(data) > MAX_IMAGE_SIZE:
+                raise HTTPException(status_code=413, detail="Image too large (max 10MB)")
             ext = _ext_from_content_type(resp.headers.get("content-type", "image/jpeg"))
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning("Failed to download image from %s: %s", url, e)
             raise HTTPException(status_code=502, detail="Failed to download image")
@@ -226,7 +267,7 @@ async def upload_read_image(read_id: int, request: Request):
     path = img_dir / f"{index}{ext}"
     path.write_bytes(data)
     logger.info("Saved image %s for read=%d (%d bytes)", index, read_id, len(data))
-    return {"index": int(index)}
+    return {"index": index}
 
 
 @app.get("/images/{read_id}/{index}")
