@@ -14,6 +14,7 @@ if (import.meta.client) {
 
 <template>
   <UApp>
+    <VitePwaManifest />
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>

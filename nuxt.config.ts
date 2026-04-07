@@ -49,7 +49,6 @@ export default defineNuxtConfig({
           src: '/icons/pwa-512x512.png',
           sizes: '512x512',
           type: 'image/png',
-          purpose: 'any maskable',
         },
       ],
     },
@@ -58,7 +57,7 @@ export default defineNuxtConfig({
       cleanupOutdatedCaches: true,
       clientsClaim: true,
       skipWaiting: true,
-      navigateFallbackDenylist: [/^\/api\//],
+      navigateFallback: null,
       runtimeCaching: [
         {
           // Cache audio files — immutable once generated
