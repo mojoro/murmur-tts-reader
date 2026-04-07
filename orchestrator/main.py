@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -118,13 +118,17 @@ THUMB_MEDIA_TYPES = {
 
 
 @app.post("/reads/{read_id}/thumbnail", status_code=204)
-async def upload_thumbnail(read_id: int, request: Request, file: UploadFile | None = None):
-    content_type = request.content_type or ""
+async def upload_thumbnail(read_id: int, request: Request):
+    content_type = request.headers.get("content-type", "")
 
-    if file and file.size:
+    if "multipart" in content_type:
+        form = await request.form()
+        file = form.get("file")
+        if not file:
+            raise HTTPException(status_code=400, detail="No file in form data")
         data = await file.read()
-        ext = _ext_from_content_type(file.content_type or "image/jpeg")
-    elif "application/json" in content_type:
+        ext = _ext_from_content_type(getattr(file, "content_type", None) or "image/jpeg")
+    elif "json" in content_type:
         import httpx
         body = await request.json()
         url = body.get("url")
@@ -142,7 +146,7 @@ async def upload_thumbnail(read_id: int, request: Request, file: UploadFile | No
             logger.warning("Failed to download thumbnail from %s: %s", url, e)
             raise HTTPException(status_code=502, detail="Failed to download thumbnail")
     else:
-        raise HTTPException(status_code=400, detail="Send file upload or JSON {url}")
+        raise HTTPException(status_code=400, detail="Send multipart file or JSON {url}")
 
     # Remove any existing thumbnail for this read
     for existing in config.THUMBNAILS_DIR.glob(f"{read_id}.*"):
