@@ -140,6 +140,8 @@ async function parseEpub(file: File): Promise<ParsedDocument> {
 
     const html = await htmlFile.async('string')
     const doc = new DOMParser().parseFromString(html, 'application/xhtml+xml')
+    // Remove style/script elements so their contents don't leak into text
+    doc.querySelectorAll('style, script, link[rel="stylesheet"]').forEach(el => el.remove())
     const text = doc.body?.textContent?.trim()
     if (text) textParts.push(text)
   }
