@@ -9,6 +9,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 export interface ParsedDocument {
   title: string
   content: string
+  thumbnail?: Blob
 }
 
 export async function parseDocument(file: File): Promise<ParsedDocument> {
@@ -24,7 +25,7 @@ export async function parseDocument(file: File): Promise<ParsedDocument> {
     case 'htm':
       return parseHtml(baseName, await file.text())
     case 'pdf':
-      return { title: baseName, content: await parsePdf(file) }
+      return { title: baseName, ...(await parsePdf(file)) }
     case 'docx':
       return { title: baseName, content: await parseDocx(file) }
     case 'epub':
@@ -70,10 +71,26 @@ function parseMarkdown(md: string): string {
     .trim()
 }
 
-async function parsePdf(file: File): Promise<string> {
+async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob }> {
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const pages: string[] = []
+
+  // Render first page as thumbnail
+  let thumbnail: Blob | undefined
+  try {
+    const firstPage = await pdf.getPage(1)
+    const viewport = firstPage.getViewport({ scale: 1 })
+    const scale = 300 / Math.max(viewport.width, viewport.height)
+    const scaledViewport = firstPage.getViewport({ scale })
+    const canvas = document.createElement('canvas')
+    canvas.width = scaledViewport.width
+    canvas.height = scaledViewport.height
+    await firstPage.render({ canvasContext: canvas.getContext('2d')!, viewport: scaledViewport }).promise
+    thumbnail = await new Promise<Blob | undefined>(resolve =>
+      canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', 0.8),
+    )
+  } catch {}
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
@@ -126,7 +143,7 @@ async function parsePdf(file: File): Promise<string> {
     pages.push(paragraphs.join('\n\n'))
   }
 
-  return pages.join('\n\n')
+  return { content: pages.join('\n\n'), thumbnail }
 }
 
 async function parseDocx(file: File): Promise<string> {
@@ -169,6 +186,33 @@ async function parseEpub(file: File): Promise<ParsedDocument> {
   // Resolve paths relative to OPF location
   const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : ''
 
+  // Extract cover image
+  let thumbnail: Blob | undefined
+  // Try properties="cover-image" first, then meta name="cover" fallback
+  let coverHref: string | null = null
+  const coverImageItem = opfDoc.querySelector('manifest item[properties~="cover-image"]')
+  if (coverImageItem) {
+    coverHref = coverImageItem.getAttribute('href')
+  } else {
+    const coverMeta = opfDoc.querySelector('metadata meta[name="cover"]')
+    const coverId = coverMeta?.getAttribute('content')
+    if (coverId) {
+      const coverItem = opfDoc.querySelector(`manifest item[id="${coverId}"]`)
+      coverHref = coverItem?.getAttribute('href') ?? null
+    }
+  }
+  if (coverHref) {
+    const coverFile = zip.file(opfDir + coverHref)
+    if (coverFile) {
+      try {
+        const data = await coverFile.async('uint8array')
+        const ext = coverHref.split('.').pop()?.toLowerCase() ?? ''
+        const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }
+        thumbnail = new Blob([data], { type: mimeMap[ext] || 'image/jpeg' })
+      } catch {}
+    }
+  }
+
   const textParts: string[] = []
   for (const itemref of spineItems) {
     const idref = itemref.getAttribute('idref')
@@ -191,5 +235,6 @@ async function parseEpub(file: File): Promise<ParsedDocument> {
   return {
     title: title || file.name.replace(/\.epub$/i, ''),
     content: textParts.join('\n\n'),
+    thumbnail,
   }
 }
