@@ -6,23 +6,41 @@
         New Read
       </UButton>
     </div>
-    <LibraryGrid :reads="reads" :loading="loading" :jobs="jobs" @delete="handleDelete" />
+    <LibraryGrid :reads="reads" :loading="loading" :jobs="activeJobs" @delete="handleDelete" />
   </div>
 </template>
 
 <script setup lang="ts">
-const { reads, loading, refresh: refreshReads, deleteRead } = useLibrary()
-const { jobs } = useQueue()
+import type { Job } from '~/types/api'
 
-// Refresh reads list when a job completes so generated_at/engine show up
-watch(jobs, (curr, prev) => {
-  if (!prev) return
-  const wasDone = (j: typeof curr[number]) => j.status === 'done'
-  if (curr.some(wasDone) && !prev.some(wasDone)) refreshReads()
-  // Also refresh if a job just finished (count of done jobs increased)
-  const doneNow = curr.filter(wasDone).length
-  const doneBefore = prev.filter(wasDone).length
-  if (doneNow > doneBefore) refreshReads()
+const { reads, loading, refresh: refreshReads, deleteRead } = useLibrary()
+
+// Light-weight job polling — only active while the library page is mounted,
+// no SSE connection (avoids Caddy abort warnings on navigation).
+const activeJobs = ref<Job[]>([])
+let pollId: ReturnType<typeof setInterval> | undefined
+
+async function pollJobs() {
+  try {
+    const jobs = await $fetch<Job[]>('/api/queue')
+    const running = jobs.filter((j) => j.status === 'pending' || j.status === 'running')
+
+    // If a job just finished (was running, now gone), refresh reads to pick up generated_at/engine
+    if (activeJobs.value.length > 0 && running.length < activeJobs.value.length) {
+      await refreshReads()
+    }
+    activeJobs.value = running
+  } catch {
+    // Offline or server error — ignore
+  }
+}
+
+onMounted(() => {
+  pollJobs()
+  pollId = setInterval(pollJobs, 5000)
+})
+onUnmounted(() => {
+  if (pollId) clearInterval(pollId)
 })
 
 async function handleDelete(id: number) {
