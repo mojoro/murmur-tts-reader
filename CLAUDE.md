@@ -60,12 +60,20 @@ cd orchestrator && uv run uvicorn main:app --port 8000
 cd alignment-server && uv run uvicorn main:app --port 8001
 ```
 
-### Docker (full stack)
+### Docker (production — with HTTPS for PWA)
 
 ```bash
-cp .env.example .env  # Set MURMUR_JWT_SECRET
-docker compose up      # app(:80) + orchestrator(:8000)
+cp .env.example .env  # Set MURMUR_JWT_SECRET and MURMUR_HOST (your LAN IP)
+docker compose up      # Caddy(:443) + app + orchestrator(:8000)
 docker compose --profile full up  # includes alignment server
+```
+
+First-time phone setup: visit `http://<LAN_IP>` to download the CA certificate and follow the on-screen instructions, then open `https://<LAN_IP>` to install the PWA.
+
+### Docker (dev — hot reload, no HTTPS)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # app(:4000)
 ```
 
 ## Environment Variables
@@ -73,7 +81,7 @@ docker compose --profile full up  # includes alignment server
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `MURMUR_JWT_SECRET` | Yes (prod) | JWT signing secret. Default: `dev-secret-change-in-production` |
-| `MURMUR_PORT` | No | Host port for Docker (default: 80) |
+| `MURMUR_HOST` | Yes | Server LAN IP (e.g. `192.168.1.100`). Used for HTTPS cert generation |
 | `HF_TOKEN` | No | Hugging Face token (needed for some voice cloning models) |
 | `NUXT_ORCHESTRATOR_URL` | No | Orchestrator URL (default: `http://localhost:8000`) |
 

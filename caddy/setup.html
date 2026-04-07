@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Murmur — Device Setup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0a0a0a; color: #e4e4e7;
+    min-height: 100dvh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 1.5rem;
+  }
+  .card {
+    max-width: 28rem; width: 100%;
+    background: #18181b; border: 1px solid #27272a; border-radius: 1rem;
+    padding: 2rem; text-align: center;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: #a1a1aa; font-size: 0.875rem; margin-bottom: 1.5rem; }
+  .steps { text-align: left; margin-bottom: 1.5rem; }
+  .step {
+    display: flex; gap: 0.75rem; padding: 0.75rem 0;
+    border-bottom: 1px solid #27272a;
+  }
+  .step:last-child { border-bottom: none; }
+  .num {
+    flex-shrink: 0; width: 1.5rem; height: 1.5rem;
+    background: #064e3b; color: #34d399; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+  }
+  .step-text { font-size: 0.875rem; line-height: 1.5; }
+  .step-text code {
+    background: #27272a; padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem; font-size: 0.8125rem;
+  }
+  .btn {
+    display: inline-block; width: 100%; padding: 0.75rem 1.5rem;
+    background: #059669; color: #fff; text-decoration: none;
+    border-radius: 0.5rem; font-weight: 600; font-size: 0.9375rem;
+    margin-bottom: 0.75rem; transition: background 0.15s;
+  }
+  .btn:hover { background: #047857; }
+  .btn-outline {
+    background: transparent; border: 1px solid #27272a; color: #a1a1aa;
+  }
+  .btn-outline:hover { background: #27272a; color: #e4e4e7; }
+  .hidden { display: none; }
+  .note { color: #71717a; font-size: 0.75rem; margin-top: 1rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Murmur</h1>
+  <p class="subtitle">Install the security certificate to enable the app on this device.</p>
+
+  <!-- Android instructions -->
+  <div id="android" class="steps hidden">
+    <div class="step">
+      <span class="num">1</span>
+      <span class="step-text">Tap <strong>Download Certificate</strong> below.</span>
+    </div>
+    <div class="step">
+      <span class="num">2</span>
+      <span class="step-text">Open <strong>Settings &gt; Security &gt; Encryption &amp; credentials &gt; Install a certificate &gt; CA certificate</strong>.</span>
+    </div>
+    <div class="step">
+      <span class="num">3</span>
+      <span class="step-text">Select the downloaded <code>murmur-ca.crt</code> file and confirm.</span>
+    </div>
+    <div class="step">
+      <span class="num">4</span>
+      <span class="step-text">Tap <strong>Open Murmur</strong> below. Chrome will offer to install the app.</span>
+    </div>
+  </div>
+
+  <!-- iOS instructions -->
+  <div id="ios" class="steps hidden">
+    <div class="step">
+      <span class="num">1</span>
+      <span class="step-text">Tap <strong>Download Certificate</strong> below (opens Settings).</span>
+    </div>
+    <div class="step">
+      <span class="num">2</span>
+      <span class="step-text">Go to <strong>Settings &gt; General &gt; VPN &amp; Device Management</strong> and install the profile.</span>
+    </div>
+    <div class="step">
+      <span class="num">3</span>
+      <span class="step-text">Go to <strong>Settings &gt; General &gt; About &gt; Certificate Trust Settings</strong> and enable full trust for <strong>Caddy Local Authority</strong>.</span>
+    </div>
+    <div class="step">
+      <span class="num">4</span>
+      <span class="step-text">Return to Safari, tap <strong>Open Murmur</strong>, then use <strong>Share &gt; Add to Home Screen</strong>.</span>
+    </div>
+  </div>
+
+  <!-- Desktop / fallback instructions -->
+  <div id="desktop" class="steps hidden">
+    <div class="step">
+      <span class="num">1</span>
+      <span class="step-text">Download and install the CA certificate in your OS or browser trust store.</span>
+    </div>
+    <div class="step">
+      <span class="num">2</span>
+      <span class="step-text">Then open the HTTPS link below.</span>
+    </div>
+  </div>
+
+  <a class="btn" href="/ca.crt">Download Certificate</a>
+  <a class="btn btn-outline" id="open-app" href="#">Open Murmur</a>
+
+  <p class="note">
+    This is a one-time setup. The certificate lets your device trust this
+    server's HTTPS connection, which is required for the app to work offline.
+  </p>
+</div>
+
+<script>
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+
+  document.getElementById(isIOS ? 'ios' : isAndroid ? 'android' : 'desktop').classList.remove('hidden');
+
+  // Build HTTPS link using current hostname (the LAN IP)
+  document.getElementById('open-app').href = 'https://' + location.hostname;
+</script>
+</body>
+</html>

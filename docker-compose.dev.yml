@@ -1,12 +1,18 @@
-# Dev overrides — the app service runs nuxi dev with source mounted
-# for hot reload without rebuilding. Orchestrator still uses the built
-# image; rebuild with: docker compose up --build orchestrator
+# Dev overrides — use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Disables Caddy, runs nuxi dev with source mounted for hot reload.
+# Orchestrator still uses the built image; rebuild with --build orchestrator
 services:
+  caddy:
+    profiles:
+      - disabled
+
   app:
     build:
       context: .
       target: build
     command: npx nuxi dev --host 0.0.0.0 --port 3000
+    ports:
+      - "4000:3000"
     volumes:
       - .:/app
       - /app/node_modules

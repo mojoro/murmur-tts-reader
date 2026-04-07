@@ -1,9 +1,24 @@
 # docker-compose.yml
 services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${MURMUR_HTTP_PORT:-80}:80"
+      - "${MURMUR_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/setup.html:/srv/setup.html:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - MURMUR_HOST=${MURMUR_HOST}
+    depends_on:
+      - app
+
   app:
     build: .
     ports:
-      - "${MURMUR_PORT:-80}:3000"
+      - "4000:3000"
     environment:
       - NUXT_ORCHESTRATOR_URL=http://orchestrator:8000
       - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
@@ -37,5 +52,7 @@ services:
       - murmur-align-cache:/app/cache
 
 volumes:
+  caddy_data:
+  caddy_config:
   murmur-data:
   murmur-align-cache:

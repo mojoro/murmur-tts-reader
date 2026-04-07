@@ -1,0 +1,29 @@
+{
+	default_sni {$MURMUR_HOST}
+	skip_install_trust
+	auto_https disable_redirects
+}
+
+# HTTP — setup page + CA cert download (needed before HTTPS is trusted)
+http://:80 {
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=\"murmur-ca.crt\""
+		file_server
+	}
+	handle {
+		root * /srv
+		try_files /setup.html
+		file_server
+	}
+}
+
+# HTTPS — main app
+https://{$MURMUR_HOST} {
+	tls internal
+	reverse_proxy app:3000 {
+		flush_interval -1
+	}
+}
