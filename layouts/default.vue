@@ -14,8 +14,15 @@
     <USlideover v-model:open="sidebarOpen" side="left" class="lg:hidden">
       <template #content>
         <div class="flex flex-col h-full">
-          <div class="flex items-center h-14 px-4 border-b border-neutral-200 dark:border-neutral-800">
+          <div class="flex items-center justify-between h-14 px-4 border-b border-neutral-200 dark:border-neutral-800">
             <span class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">Murmur</span>
+            <UButton
+              icon="i-lucide-x"
+              variant="ghost"
+              color="neutral"
+              size="sm"
+              @click="sidebarOpen = false"
+            />
           </div>
           <AppSidebar @navigate="sidebarOpen = false" />
         </div>
@@ -35,4 +42,6 @@
 
 <script setup lang="ts">
 const sidebarOpen = ref(false)
+const route = useRoute()
+watch(() => route.path, () => { sidebarOpen.value = false })
 </script>
