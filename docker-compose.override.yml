@@ -1,6 +1,6 @@
-# Dev overrides — mounts source code so changes apply without --build.
-# The app service runs `npm run dev` instead of the production build.
-# The orchestrator mounts source and uses uvicorn --reload for auto-restart.
+# Dev overrides — the app service runs nuxi dev with source mounted
+# for hot reload without rebuilding. Orchestrator still uses the built
+# image; rebuild with: docker compose up --build orchestrator
 services:
   app:
     build:
@@ -10,12 +10,3 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-
-  orchestrator:
-    volumes:
-      - murmur-data:/app/data
-      - ./orchestrator:/app/orchestrator
-    command: >
-      orchestrator/.venv/bin/uvicorn orchestrator.main:app
-      --host 0.0.0.0 --port 8000 --reload
-      --reload-dir orchestrator
