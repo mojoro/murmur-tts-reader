@@ -5,10 +5,11 @@ export interface ExtractedArticle {
   content: string
   excerpt?: string
   siteName?: string
+  thumbnailUrl?: string
 }
 
 export async function extractArticle(url: string): Promise<ExtractedArticle> {
-  const { html } = await $fetch<{ html: string }>('/api/extract-url', {
+  const { html, thumbnailUrl } = await $fetch<{ html: string; thumbnailUrl: string | null }>('/api/extract-url', {
     method: 'POST',
     body: { url },
   })
@@ -31,5 +32,6 @@ export async function extractArticle(url: string): Promise<ExtractedArticle> {
     content: article.textContent.trim(),
     excerpt: article.excerpt ?? undefined,
     siteName: article.siteName ?? undefined,
+    thumbnailUrl: thumbnailUrl ?? undefined,
   }
 }

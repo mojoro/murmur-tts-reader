@@ -27,7 +27,18 @@ export default defineEventHandler(async (event) => {
     }
 
     const html = await response.text()
-    return { html }
+
+    // Extract og:image for thumbnail
+    let thumbnailUrl: string | null = null
+    const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+    if (ogMatch?.[1]) {
+      try {
+        thumbnailUrl = new URL(ogMatch[1], url).href
+      } catch {}
+    }
+
+    return { html, thumbnailUrl }
   } catch (error: any) {
     if (error.statusCode) throw error
     throw createError({
