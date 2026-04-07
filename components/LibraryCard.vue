@@ -20,7 +20,7 @@
           {{ read.type }}
         </UBadge>
       </div>
-      <p class="text-sm text-neutral-500">~{{ readTime }} min read</p>
+      <p class="text-sm text-neutral-500">{{ readTimeLabel }}</p>
       <UProgress
         v-if="progressPercent > 0"
         :model-value="progressPercent"
@@ -55,9 +55,12 @@ const emit = defineEmits<{
 
 const showThumb = ref(true)
 
-const readTime = computed(() => {
-  const estWords = props.read.segment_count * 15
-  return Math.max(1, Math.round(estWords / 200))
+const readTimeLabel = computed(() => {
+  const mins = Math.max(1, Math.round(props.read.segment_count * 15 / 200))
+  if (mins < 60) return `~${mins} min read`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m > 0 ? `~${h} hr ${m} min read` : `~${h} hr read`
 })
 
 const progressPercent = computed(() => {
