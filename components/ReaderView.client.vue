@@ -8,8 +8,14 @@
       :class="segmentClasses(index)"
       @click="handleClick(index)"
     >
+      <img
+        v-if="getImageIndex(segment) !== null"
+        :src="`/api/images/${segment.read_id}/${getImageIndex(segment)}`"
+        class="max-w-full rounded-lg my-2"
+        loading="lazy"
+      />
       <WordHighlighter
-        v-if="getWordTimings(segment)"
+        v-else-if="getWordTimings(segment)"
         :words="getWordTimings(segment)!"
         :is-active="index === currentSegmentIndex"
       />
@@ -39,6 +45,13 @@ function segmentClasses(index: number) {
     'border-l-2 border-transparent': !hasAudio && !isActive,
     'hover:bg-neutral-100 dark:hover:bg-neutral-900': !isActive,
   }
+}
+
+const IMAGE_MARKER_RE = /^\[image:(\d+)\]$/
+
+function getImageIndex(segment: AudioSegment): number | null {
+  const match = segment.text.match(IMAGE_MARKER_RE)
+  return match ? parseInt(match[1]) : null
 }
 
 function getWordTimings(segment: AudioSegment): WordTiming[] | null {

@@ -6,10 +6,16 @@ import { Readability } from '@mozilla/readability'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
+export interface ExtractedImage {
+  data: Blob
+  alt?: string
+}
+
 export interface ParsedDocument {
   title: string
   content: string
   thumbnail?: Blob
+  images?: ExtractedImage[]
 }
 
 export async function parseDocument(file: File): Promise<ParsedDocument> {
