@@ -35,10 +35,8 @@ function ensureAudio(): HTMLAudioElement {
     })
     audio.addEventListener('ended', () => {
       isPlaying.value = false
-      const nextIndex = currentSegmentIndex.value + 1
-      if (nextIndex < segments.value.length && segments.value[nextIndex].audio_generated) {
-        playSegment(nextIndex)
-      }
+      const next = findNextPlayable(currentSegmentIndex.value + 1, 1)
+      if (next !== null) playSegment(next)
     })
     audio.addEventListener('play', () => {
       isPlaying.value = true
@@ -56,9 +54,26 @@ function ensureAudio(): HTMLAudioElement {
   return audio!
 }
 
+const IMAGE_MARKER_RE = /^\[image:\d+\]$/
+
+function isImageSegment(seg: AudioSegment): boolean {
+  return IMAGE_MARKER_RE.test(seg.text)
+}
+
+/** Find the next non-image segment index in the given direction. */
+function findNextPlayable(from: number, direction: 1 | -1): number | null {
+  let i = from
+  while (i >= 0 && i < segments.value.length) {
+    if (!isImageSegment(segments.value[i]) && segments.value[i].audio_generated) return i
+    i += direction
+  }
+  return null
+}
+
 const WORDS_PER_MINUTE = 150
 
 function estimateSegmentDuration(seg: AudioSegment): number {
+  if (isImageSegment(seg)) return 0
   const known = segmentDurations.get(seg.segment_index)
   if (known) return known
   const wordCount = seg.text.split(/\s+/).length
@@ -152,7 +167,11 @@ export function useAudioPlayer() {
       }
       accumulated += segDur
     }
-    if (targetIndex === currentSegmentIndex.value) {
+    // If target is an image segment, find the nearest playable one
+    if (isImageSegment(segments.value[targetIndex])) {
+      const next = findNextPlayable(targetIndex, 1) ?? findNextPlayable(targetIndex, -1)
+      if (next !== null) playSegment(next)
+    } else if (targetIndex === currentSegmentIndex.value) {
       seek(offset)
     } else if (segments.value[targetIndex].audio_generated) {
       playSegment(targetIndex, offset)
@@ -160,15 +179,13 @@ export function useAudioPlayer() {
   }
 
   function skipPrev() {
-    const prevIndex = currentSegmentIndex.value - 1
-    if (prevIndex >= 0) playSegment(prevIndex)
+    const prev = findNextPlayable(currentSegmentIndex.value - 1, -1)
+    if (prev !== null) playSegment(prev)
   }
 
   function skipNext() {
-    const nextIndex = currentSegmentIndex.value + 1
-    if (nextIndex < segments.value.length && segments.value[nextIndex].audio_generated) {
-      playSegment(nextIndex)
-    }
+    const next = findNextPlayable(currentSegmentIndex.value + 1, 1)
+    if (next !== null) playSegment(next)
   }
 
   function stop() {
