@@ -30,6 +30,7 @@ export default defineNuxtConfig({
     preference: 'dark'
   },
   pwa: {
+    devOptions: { enabled: false },
     registerType: 'autoUpdate',
     manifest: {
       name: 'Murmur',
