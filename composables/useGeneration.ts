@@ -24,11 +24,22 @@ export function useGeneration(readId: Ref<number>, options: GenerationOptions = 
     connectSSE()
   }
 
+  function onVisibilityChange() {
+    if (document.hidden) {
+      disconnectSSE()
+    } else if (generating.value) {
+      connectSSE()
+    }
+  }
+
   function connectSSE() {
     if (!import.meta.client || !job.value) return
     disconnectSSE()
 
     eventSource = new EventSource('/api/queue/events')
+    eventSource.onerror = () => {
+      disconnectSSE()
+    }
 
     eventSource.addEventListener('job:progress', (e: MessageEvent) => {
       const data = JSON.parse(e.data)
@@ -75,7 +86,13 @@ export function useGeneration(readId: Ref<number>, options: GenerationOptions = 
     disconnectSSE()
   }
 
-  onUnmounted(disconnectSSE)
+  onMounted(() => {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  })
+  onUnmounted(() => {
+    disconnectSSE()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  })
 
   return {
     job: readonly(job),
