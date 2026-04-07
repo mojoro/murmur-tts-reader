@@ -11,7 +11,7 @@ Open-source, self-hosted alternative to ElevenReader. Paste text, select a voice
 | Server | Nitro (Nuxt server routes) — BFF that proxies to orchestrator |
 | Auth | JWT in httpOnly cookie, verified server-side (jose) |
 | Orchestrator | FastAPI (Python) — owns SQLite DB, manages TTS engines, job queue |
-| TTS Engines | 5 interchangeable backends, managed by orchestrator |
+| TTS Engines | 5 interchangeable backends (Pocket TTS, XTTS v2, F5 TTS, GPT-SoVITS, CosyVoice 2) |
 | Alignment | FastAPI (Python) — WhisperX forced-alignment on port 8001 |
 | Offline | Workbox service worker + IndexedDB mutation queue |
 
@@ -82,6 +82,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # app(:4000)
 |----------|----------|-------------|
 | `MURMUR_JWT_SECRET` | Yes (prod) | JWT signing secret. Default: `dev-secret-change-in-production` |
 | `MURMUR_HOST` | Yes | Server LAN IP (e.g. `192.168.1.100`). Used for HTTPS cert generation |
+| `MURMUR_PORT` | No | HTTPS port (default: `443`) |
+| `MURMUR_HTTP_PORT` | No | HTTP port for setup page (default: `80`) |
 | `HF_TOKEN` | No | Hugging Face token (needed for some voice cloning models) |
 | `NUXT_ORCHESTRATOR_URL` | No | Orchestrator URL (default: `http://localhost:8000`) |
 
@@ -142,6 +144,7 @@ middleware/
 server/
   middleware/auth.ts     # Validates JWT cookie on /api/* routes, sets event.context.userId
   api/auth/              # login.post, register.post, logout.post, me.get
+  api/extract-url.post.ts # Server-side URL fetching (avoids CORS issues)
   api/[...].ts           # Catch-all proxy: strips /api, forwards to orchestrator with X-User-Id
   utils/jwt.ts           # JWT verification (jose)
   utils/orchestrator.ts  # orchestratorFetch() helper + cookie config
@@ -173,7 +176,8 @@ The Nuxt BFF proxies all `/api/*` requests to the orchestrator. Frontend code ca
 | `PATCH /api/reads/:id` | `PATCH /reads/:id` | Update progress, title |
 | `DELETE /api/reads/:id` | `DELETE /reads/:id` | Delete read + audio files |
 | `GET /api/audio/:readId/:segIdx` | `GET /audio/:readId/:segIdx` | Stream audio WAV |
-| `POST /api/reads/:id/generate` | `POST /reads/:id/generate` | Start TTS job → returns Job |
+| `POST /api/reads/:id/generate` | `POST /reads/:id/generate` | Start TTS job (or regenerate) → returns Job |
+| `GET /api/audio/:readId/bundle?start=&end=` | `GET /audio/:readId/bundle?...` | Bundled audio download (up to 30 segments) |
 | `GET /api/reads/:id/bookmarks` | `GET /reads/:id/bookmarks` | List bookmarks |
 | `POST /api/reads/:id/bookmarks` | `POST /reads/:id/bookmarks` | Create bookmark |
 | `DELETE /api/reads/:id/bookmarks/:bid` | ... | Delete bookmark |
@@ -224,11 +228,12 @@ Tests live in `tests/` and use vitest + jsdom. Current coverage:
 - Bookmarks with notes at segment level
 - Audio export (concatenates segment WAVs into single download)
 - Library with search, sort, delete
+- Inline images extracted from PDF, EPUB, DOCX, and web articles — displayed in reader
+- Thumbnails extracted from documents and shown on library cards
+- Regenerate audio for existing reads (different voice/engine or after enabling alignment)
 - PWA with offline support (Workbox caching + IndexedDB mutation queue + background sync)
-- Docker Compose deployment (app + orchestrator + optional alignment server)
+- Background sync: cache-aware batched audio downloads + SSR page pre-fetching
+- Docker Compose deployment (Caddy HTTPS + app + orchestrator + optional alignment server)
+- Docker dev mode with hot reload (docker-compose.dev.yml)
 - Dark mode (default) with toggle
 - Responsive layout (desktop sidebar, mobile drawer)
-
-## Not Yet Implemented
-
-- YouTube transcript extraction
