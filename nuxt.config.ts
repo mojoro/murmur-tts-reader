@@ -3,6 +3,15 @@ export default defineNuxtConfig({
   modules: ['@nuxt/ui', '@vite-pwa/nuxt'],
   compatibilityDate: '2025-03-23',
   ssr: true,
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/icons/icon.svg' },
+        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icons/pwa-192x192.png' },
+        { rel: 'apple-touch-icon', href: '/icons/pwa-192x192.png' },
+      ],
+    },
+  },
   runtimeConfig: {
     orchestratorUrl: 'http://localhost:8000',
     jwtSecret: 'dev-secret-change-in-production',
