@@ -1,14 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="64" fill="#0a0a0a"/>
-  <g transform="translate(256, 256)">
-    <!-- Headphone arc -->
-    <path d="M-120,-40 A140,140 0 0,1 120,-40" stroke="#38bdf8" stroke-width="28" fill="none" stroke-linecap="round"/>
-    <!-- Left ear -->
-    <rect x="-148" y="-50" width="56" height="90" rx="16" fill="#38bdf8"/>
-    <!-- Right ear -->
-    <rect x="92" y="-50" width="56" height="90" rx="16" fill="#38bdf8"/>
-    <!-- Sound waves -->
-    <path d="M-40,80 Q-20,60 0,80 Q20,100 40,80" stroke="#38bdf8" stroke-width="12" fill="none" stroke-linecap="round"/>
-    <path d="M-60,110 Q-30,80 0,110 Q30,140 60,110" stroke="#38bdf8" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.6"/>
-  </g>
+  <circle cx="256" cy="256" r="256" fill="#0a0a0a"/>
+  <!-- Zigzag waveform whose amplitude envelope traces a capital M -->
+  <polyline
+    points="90,260 106,308 122,200 138,370 154,140 170,385 186,180 202,325 218,240 234,285 256,260 278,285 294,240 310,325 326,180 342,385 358,140 374,370 390,200 406,308 422,260"
+    stroke="#10b981"
+    stroke-width="12"
+    fill="none"
+    stroke-linejoin="miter"
+    stroke-miterlimit="20"/>
 </svg>

@@ -5,9 +5,13 @@ export default defineNuxtConfig({
   ssr: true,
   app: {
     head: {
+      title: 'Murmur',
+      meta: [
+        { name: 'description', content: 'Self-hosted text-to-speech reader with voice cloning' },
+      ],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/icons/icon.svg' },
-        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icons/pwa-192x192.png' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'apple-touch-icon', href: '/icons/pwa-192x192.png' },
       ],
     },
