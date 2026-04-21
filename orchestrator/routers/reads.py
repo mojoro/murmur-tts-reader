@@ -5,8 +5,6 @@ import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 
 import orchestrator.config as config
-
-logger = logging.getLogger(__name__)
 from orchestrator.auth import get_current_user_id
 from orchestrator.db import get_db
 from orchestrator.engine_manager import engine_manager
@@ -21,6 +19,8 @@ from orchestrator.models import (
     UpdateReadRequest,
 )
 from orchestrator.sentence_splitter import split_sentences
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reads", tags=["reads"])
 

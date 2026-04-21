@@ -1,10 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-
-logger = logging.getLogger(__name__)
 
 import orchestrator.config as config
 from orchestrator.config import AUDIO_DIR, DATA_DIR
@@ -12,13 +11,15 @@ from orchestrator.db import init_db, open_db
 from orchestrator.engine_manager import engine_manager
 from orchestrator.job_worker import job_worker
 from orchestrator.routers.auth_router import router as auth_router
-from orchestrator.routers.reads import router as reads_router
-from orchestrator.routers.voices import router as voices_router
-from orchestrator.routers.settings import router as settings_router
+from orchestrator.routers.backends import router as backends_router
 from orchestrator.routers.bookmarks import router as bookmarks_router
 from orchestrator.routers.health import router as health_router
-from orchestrator.routers.backends import router as backends_router
 from orchestrator.routers.queue import router as queue_router
+from orchestrator.routers.reads import router as reads_router
+from orchestrator.routers.settings import router as settings_router
+from orchestrator.routers.voices import router as voices_router
+
+logger = logging.getLogger(__name__)
 
 
 async def sync_builtin_voices():
