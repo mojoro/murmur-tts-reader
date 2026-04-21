@@ -30,8 +30,9 @@ services:
     build:
       context: .
       dockerfile: orchestrator/Dockerfile
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - murmur-data:/app/data
+      - ./data:/app/data
     environment:
       - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
       - MURMUR_ALIGN_URL=http://align:8001
@@ -54,5 +55,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-  murmur-data:
   murmur-align-cache:
