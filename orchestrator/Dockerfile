@@ -32,7 +32,12 @@ COPY tts-servers/xtts-server/main.py tts-servers/xtts-server/pyproject.toml tts-
 COPY tts-servers/f5tts-server/main.py tts-servers/f5tts-server/pyproject.toml tts-servers/f5tts-server/post_install.py tts-servers/f5tts-server/
 COPY tts-servers/gptsovits-server/main.py tts-servers/gptsovits-server/pyproject.toml tts-servers/gptsovits-server/post_install.py tts-servers/gptsovits-server/
 COPY tts-servers/cosyvoice-server/main.py tts-servers/cosyvoice-server/pyproject.toml tts-servers/cosyvoice-server/post_install.py tts-servers/cosyvoice-server/
-COPY tts-servers/cosyvoice-server/repo/ tts-servers/cosyvoice-server/repo/
+
+# Clone CosyVoice inference repo (provides `cosyvoice` Python package on sys.path
+# and its Matcha-TTS submodule). Gitignored locally, so we fetch at build time.
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
+    https://github.com/FunAudioLLM/CosyVoice.git \
+    tts-servers/cosyvoice-server/repo
 
 ENV MURMUR_DATA_DIR=/app/data
 ENV COQUI_TOS_AGREED=1
