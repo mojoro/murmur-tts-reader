@@ -1,13 +1,9 @@
-import pytest
 import pytest_asyncio
-import aiosqlite
-from pathlib import Path
 from httpx import AsyncClient, ASGITransport
 
 from orchestrator.main import app
-from orchestrator.config import DB_PATH, DATA_DIR
 from orchestrator.db import init_db
-from orchestrator.engine_manager import EngineManager, EngineStatus
+from orchestrator.engine_manager import EngineManager
 from orchestrator.job_events import JobEventBus
 from orchestrator.job_worker import JobWorker
 

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 import bcrypt
-from fastapi import Depends, Header, HTTPException
+from fastapi import Header, HTTPException
 
 from orchestrator.config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRY_HOURS
 

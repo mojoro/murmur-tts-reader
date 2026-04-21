@@ -1,12 +1,10 @@
 import io
-import os
 import sys
 import uuid
 from pathlib import Path
 
 import numpy as np
 import scipy.io.wavfile as wavfile
-import torch
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse

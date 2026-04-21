@@ -1,5 +1,3 @@
-import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -281,7 +279,7 @@ async def test_resume_waiting_jobs_skipped_when_no_engine(worker, em):
 
 async def test_process_job_engine_down(worker, em, event_bus):
     job_id, _ = await _seed_job()
-    q = event_bus.subscribe(user_id=1)
+    event_bus.subscribe(user_id=1)
 
     # Clear active engine to simulate engine down
     em._active_engine = None
