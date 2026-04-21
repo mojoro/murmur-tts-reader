@@ -5,15 +5,16 @@ from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
 import torch
-# Patch torch.load for Coqui TTS compatibility with PyTorch 2.6+
+
+# Patch torch.load for Coqui TTS compatibility with PyTorch 2.6+ — must happen before TTS import
 _orig_load = torch.load
 torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from TTS.api import TTS
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
+from TTS.api import TTS  # noqa: E402
 
 app = FastAPI(title="XTTS-v2 TTS Server")
 

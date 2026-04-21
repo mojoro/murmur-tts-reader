@@ -6,14 +6,14 @@ import numpy as np
 import scipy.io.wavfile as wav
 import torch
 
-# Patch torch.load for PyTorch 2.6+ compatibility
+# Patch torch.load for PyTorch 2.6+ compatibility — must happen before downstream imports
 _orig_load = torch.load
 torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
 app = FastAPI(title="GPT-SoVITS TTS Server")
 

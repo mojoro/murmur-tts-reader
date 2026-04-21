@@ -6,7 +6,7 @@ model = F5TTS()
 
 # Pre-download Whisper model used for reference audio transcription
 print("Downloading Whisper ASR model...")
-from f5_tts.infer.utils_infer import initialize_asr_pipeline
+from f5_tts.infer.utils_infer import initialize_asr_pipeline  # noqa: E402
 initialize_asr_pipeline()
 
 print("All models downloaded.")

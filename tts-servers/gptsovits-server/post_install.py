@@ -31,7 +31,7 @@ DIRS = [
 ]
 
 print("Downloading pretrained models from HuggingFace...")
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
 
 for fname in FILES:
     dest = MODELS_DIR / fname
@@ -55,7 +55,7 @@ for dirname in DIRS:
 
 # 3. Pre-download NLTK data used by g2p-en
 print("Downloading NLTK data...")
-import nltk
+import nltk  # noqa: E402
 nltk.download("averaged_perceptron_tagger", quiet=True)
 nltk.download("averaged_perceptron_tagger_eng", quiet=True)
 nltk.download("cmudict", quiet=True)
