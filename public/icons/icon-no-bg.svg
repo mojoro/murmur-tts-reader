@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Zigzag waveform whose amplitude envelope traces a capital M -->
+  <polyline
+    points="75,250 93,305 111,190 129,385 147,120 166,405 184,165 202,325 220,230 238,285 256,250 274,285 293,230 311,325 329,165 347,405 365,120 383,385 402,190 420,305 437,250"
+    stroke="#10b981"
+    stroke-width="12"
+    fill="none"
+    stroke-linejoin="miter"
+    stroke-miterlimit="20"/>
+</svg>

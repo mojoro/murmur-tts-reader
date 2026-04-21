@@ -1,5 +1,5 @@
 # Dockerfile (Nuxt frontend)
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
@@ -10,7 +10,9 @@ COPY . .
 RUN npm run build
 
 # --- Runtime ---
-FROM node:20-alpine
+FROM node:22-alpine
+
+RUN apk update && apk upgrade --no-cache
 
 WORKDIR /app
 
