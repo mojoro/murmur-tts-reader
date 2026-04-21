@@ -35,7 +35,7 @@ Docker is the recommended way to run Murmur. You need [Docker](https://docs.dock
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/anthropics/murmur-tts-reader.git
+git clone https://github.com/mojoro/murmur-tts-reader.git
 cd murmur-tts-reader
 cp .env.example .env
 ```
@@ -161,6 +161,27 @@ The frontend never talks to the orchestrator directly. The Nitro BFF validates t
 - **Sentence-by-sentence TTS** — text is split into segments server-side, enabling progressive playback and per-sentence alignment.
 - **One engine at a time** — the orchestrator manages engine processes (install, start, stop). Only one engine runs to keep resource usage low.
 - **Offline-first PWA** — Workbox caches the app shell and API responses. Audio is CacheFirst (immutable once generated). An IndexedDB queue replays failed writes on reconnect, and background sync pre-fetches audio in batches.
+
+## Project Layout
+
+```text
+frontend/           # Nuxt 3 app (pages, components, composables, Nitro BFF)
+orchestrator/       # FastAPI: SQLite, auth, job queue, engine lifecycle
+tts-servers/        # 5 interchangeable TTS engines
+  pocket-tts-server/  # default, CPU-friendly, 8 built-in voices
+  xtts-server/        # multilingual clone
+  f5tts-server/       # clone-only, auto-transcribes reference
+  gptsovits-server/   # clone-only, auto-trims reference
+  cosyvoice-server/   # zero-shot / cross-lingual
+alignment-server/   # FastAPI WhisperX forced-alignment (optional)
+caddy/              # First-time LAN setup page (CA cert download)
+docs/               # Design notes, specs, session notes
+Caddyfile           # Prod HTTPS reverse proxy + SSE tuning
+docker-compose.yml  # caddy + app + orchestrator (+ align via --profile full)
+docker-compose.dev.yml  # overrides for hot-reload dev
+```
+
+See [CLAUDE.md](./CLAUDE.md) for a deeper tour of the frontend structure, API surface, and design decisions.
 
 ## Environment Variables
 
