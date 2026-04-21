@@ -681,8 +681,8 @@ For local dev without Docker, you need three terminals:
 # Terminal 1: TTS engine
 cd tts-servers/pocket-tts-server && uv run uvicorn main:app --port 8000
 
-# Terminal 2: Orchestrator
-cd orchestrator && uv run uvicorn orchestrator.main:app --port 8000
+# Terminal 2: Orchestrator (from repo root — orchestrator/main.py uses package imports)
+uv --project orchestrator run uvicorn orchestrator.main:app --port 8000
 # (Stop the TTS engine first — orchestrator manages it as a subprocess on port 8100)
 
 # Terminal 3: Frontend

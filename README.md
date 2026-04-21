@@ -93,6 +93,7 @@ Register from the login page, paste some text or import a document, select a voi
 ### Frontend
 
 ```bash
+cd frontend
 npm install
 npm run dev          # Nuxt dev server on http://localhost:4000
 ```
@@ -100,9 +101,8 @@ npm run dev          # Nuxt dev server on http://localhost:4000
 ### Orchestrator (required)
 
 ```bash
-cd orchestrator
-uv sync
-uv run uvicorn main:app --port 8000
+(cd orchestrator && uv sync)
+uv --project orchestrator run uvicorn orchestrator.main:app --port 8000
 ```
 
 ### Alignment server (optional)
@@ -126,6 +126,7 @@ This mounts the source directory into the container and runs `nuxi dev`. No Cadd
 ### Running tests
 
 ```bash
+cd frontend
 npm run test         # vitest run
 npm run test:watch   # vitest watch mode
 ```

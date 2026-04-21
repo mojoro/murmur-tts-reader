@@ -8,11 +8,11 @@ services:
 
   app:
     build:
-      context: .
+      context: ./frontend
       target: build
     command: npx nuxi dev --host 0.0.0.0 --port 3000
     ports:
       - "4000:3000"
     volumes:
-      - .:/app
+      - ./frontend:/app
       - /app/node_modules

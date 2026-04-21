@@ -41,7 +41,10 @@ The frontend calls `/api/*` routes on the Nitro server, which validates the JWT 
 
 ## Dev Commands
 
+Frontend commands are run from `frontend/`:
+
 ```bash
+cd frontend
 npm run dev        # Nuxt dev server on port 4000
 npm run build      # Production build → .output/
 npm run test       # vitest run
@@ -50,14 +53,17 @@ npm run test:watch # vitest watch mode
 
 ### Orchestrator (required)
 
+Run from the repo root — `orchestrator/main.py` uses package imports (`import orchestrator.config`), so the `orchestrator` package must be importable from CWD:
+
 ```bash
-cd orchestrator && uv run uvicorn main:app --port 8000
+uv --project orchestrator run uvicorn orchestrator.main:app --port 8000
 ```
 
 ### Alignment server (optional, enables word-level highlighting)
 
 ```bash
-cd alignment-server && uv run uvicorn main:app --port 8001
+cd alignment-server
+uv run uvicorn main:app --port 8001
 ```
 
 ### Docker (production — with HTTPS for PWA)
@@ -90,6 +96,42 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # app(:4000)
 ## Project Structure
 
 ```
+frontend/                  # Nuxt app (all frontend code lives here)
+  pages/
+  components/
+  composables/
+  layouts/
+  middleware/
+  public/
+  server/
+  tests/
+  types/
+  utils/
+  app.vue
+  app.config.ts
+  app.css
+  error.vue
+  nuxt.config.ts
+  package.json
+  Dockerfile             # Nuxt production image
+
+tts-servers/               # 5 interchangeable TTS engine FastAPI servers
+  pocket-tts-server/       # default, CPU-friendly, built-in voices
+  xtts-server/             # multilingual clone
+  f5tts-server/            # clone-only, auto-transcribes reference
+  gptsovits-server/        # clone-only, auto-trims reference
+  cosyvoice-server/        # zero-shot / cross-lingual
+
+orchestrator/              # FastAPI BFF for engines + SQLite + job queue
+alignment-server/          # FastAPI WhisperX forced-alignment (port 8001)
+caddy/                     # Caddy setup page (served during first-time LAN setup)
+docs/                      # design notes, specs, session notes
+Caddyfile                  # Caddy config for production HTTPS
+docker-compose.yml         # caddy + app (frontend) + orchestrator + align
+docker-compose.dev.yml     # dev overrides: nuxi dev with hot reload
+
+# Frontend details (all paths below are under frontend/)
+
 pages/
   index.vue              # / — Library grid (search, sort, delete)
   new.vue                # /new — Create read (title, text, voice, URL/file import)

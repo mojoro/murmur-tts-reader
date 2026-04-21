@@ -24,18 +24,6 @@ export default defineNuxtConfig({
   devServer: {
     port: 4000
   },
-  vite: {
-    server: {
-      watch: {
-        ignored: [
-          '**/tts-servers/**',
-          '**/orchestrator/**',
-          '**/alignment-server/**',
-          '**/data/**',
-        ],
-      },
-    },
-  },
   colorMode: {
     preference: 'dark'
   },

@@ -16,7 +16,7 @@ services:
       - app
 
   app:
-    build: .
+    build: ./frontend
     ports:
       - "4000:3000"
     environment:
