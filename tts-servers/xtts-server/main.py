@@ -104,7 +104,7 @@ async def clone_voice(
     if not file.filename or not file.filename.endswith(".wav"):
         raise HTTPException(400, "Upload a WAV file")
 
-    safe_name = "".join(c for c in name if c.isalnum() or c in "-_").lower()
+    safe_name = "".join(c for c in name if c.isalnum() or c in "-_ ").strip()
     if not safe_name:
         safe_name = uuid.uuid4().hex[:8]
 
