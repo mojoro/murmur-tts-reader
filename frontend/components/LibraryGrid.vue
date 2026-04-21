@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-4">
     <div class="flex items-center gap-3">
       <UInput v-model="search" icon="i-lucide-search" placeholder="Search reads..." class="flex-1" />
-      <USelectMenu v-model="sortBy" :items="sortOptions" class="w-40" />
+      <USelectMenu v-model="sortBy" :items="sortOptions" value-key="value" class="w-40" />
     </div>
 
     <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

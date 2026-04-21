@@ -49,7 +49,7 @@ export async function extractArticle(url: string): Promise<ExtractedArticle> {
   const { text, images } = htmlToText(article.content, url)
 
   return {
-    title: pageTitle || article.title,
+    title: pageTitle || article.title || 'Untitled',
     content: text,
     excerpt: article.excerpt ?? undefined,
     siteName: article.siteName ?? undefined,

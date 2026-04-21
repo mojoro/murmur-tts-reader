@@ -39,11 +39,13 @@ export async function parseDocument(file: File): Promise<ParsedDocument> {
     case 'htm':
       return parseHtml(baseName, await file.text())
     case 'pdf':
-      return { title: baseName, ...(await parsePdf(file)) }
+      return { ...(await parsePdf(file)), title: baseName }
     case 'docx':
-      return { title: baseName, ...(await parseDocx(file)) }
-    case 'epub':
-      return { title: baseName, ...(await parseEpub(file)) }
+      return { ...(await parseDocx(file)), title: baseName }
+    case 'epub': {
+      const parsed = await parseEpub(file)
+      return { ...parsed, title: parsed.title || baseName }
+    }
     default:
       throw new Error(`Unsupported file type: .${ext}`)
   }
@@ -144,7 +146,7 @@ async function extractPageImages(
     const op = fnArray[i]
 
     // Track transforms for image positioning
-    if (op === pdfjs.OPS.transform || op === pdfjs.OPS.setTransform) {
+    if (op === pdfjs.OPS.transform || op === (pdfjs.OPS as any).setTransform) {
       const args = argsArray[i]
       if (args && args.length >= 6) lastTransformY = args[5]
     }
@@ -208,7 +210,7 @@ async function parsePdf(file: File): Promise<{ content: string; thumbnail?: Blob
     const canvas = document.createElement('canvas')
     canvas.width = svp.width
     canvas.height = svp.height
-    await firstPage.render({ canvasContext: canvas.getContext('2d')!, viewport: svp }).promise
+    await firstPage.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: svp }).promise
     thumbnail = await new Promise<Blob | undefined>(resolve =>
       canvas.toBlob(b => resolve(b ?? undefined), 'image/jpeg', 0.8),
     )
@@ -442,7 +444,7 @@ async function parseEpub(file: File): Promise<ParsedDocument> {
         const data = await coverFile.async('uint8array')
         const ext = coverHref.split('.').pop()?.toLowerCase() ?? ''
         const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }
-        thumbnail = new Blob([data], { type: mimeMap[ext] || 'image/jpeg' })
+        thumbnail = new Blob([data as BlobPart], { type: mimeMap[ext] || 'image/jpeg' })
       } catch {}
     }
   }
@@ -559,7 +561,7 @@ async function extractEpubImage(
     const data = await imgFile.async('uint8array')
     const ext = src.split('.').pop()?.toLowerCase()?.replace(/\?.*$/, '') ?? ''
     const mimeType = mimeMap[ext] || 'image/jpeg'
-    const blob = new Blob([data], { type: mimeType })
+    const blob = new Blob([data as BlobPart], { type: mimeType })
     const alt = img.getAttribute('alt') || undefined
     const idx = images.length
     images.push({ data: blob, alt })

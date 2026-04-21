@@ -20,9 +20,9 @@ export async function orchestratorFetch<T>(
   return $fetch<T>(path, {
     baseURL: config.orchestratorUrl,
     method: (options.method as any) || 'GET',
-    body: options.body,
+    body: options.body as any,
     headers,
-  })
+  }) as Promise<T>
 }
 
 /** Cookie name used for JWT auth token. */

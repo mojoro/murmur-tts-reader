@@ -57,7 +57,7 @@ async function processQueue(): Promise<void> {
     try {
       await $fetch(mutation.url, {
         method: mutation.method as any,
-        body: mutation.body,
+        body: mutation.body as any,
       })
     } catch (error: any) {
       // If resource is gone (404) or conflict (409), skip it
