@@ -13,14 +13,14 @@ orchestrator/data/
 *.egg-info
 
 # TTS engine model/cache dirs (multi-GB, download at runtime)
-xtts-server/models/
-xtts-server/voices/
-f5tts-server/models/
-f5tts-server/voices/
-gptsovits-server/pretrained_models/
-gptsovits-server/voices/
-cosyvoice-server/models/
-cosyvoice-server/voices/
+tts-servers/xtts-server/models/
+tts-servers/xtts-server/voices/
+tts-servers/f5tts-server/models/
+tts-servers/f5tts-server/voices/
+tts-servers/gptsovits-server/pretrained_models/
+tts-servers/gptsovits-server/voices/
+tts-servers/cosyvoice-server/models/
+tts-servers/cosyvoice-server/voices/
 
 # Dev/docs
 docs/

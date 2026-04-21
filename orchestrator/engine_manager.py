@@ -44,7 +44,7 @@ class EngineManager:
     def _engine_dir(self, name: str) -> Path:
         engine = get_engine(name)
         repo_root = Path(__file__).parent.parent
-        dev_path = repo_root / engine.repo_dir
+        dev_path = repo_root / "tts-servers" / engine.repo_dir
         docker_path = config.ENGINES_DIR / engine.repo_dir
         if dev_path.exists():
             return dev_path

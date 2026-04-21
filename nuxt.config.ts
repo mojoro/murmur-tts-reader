@@ -28,12 +28,9 @@ export default defineNuxtConfig({
     server: {
       watch: {
         ignored: [
-          '**/pocket-tts-server/**',
-          '**/xtts-server/**',
-          '**/f5tts-server/**',
-          '**/gptsovits-server/**',
-          '**/cosyvoice-server/**',
+          '**/tts-servers/**',
           '**/orchestrator/**',
+          '**/alignment-server/**',
           '**/data/**',
         ],
       },

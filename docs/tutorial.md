@@ -67,7 +67,7 @@ Every backend exposes these 4 endpoints on port 8000:
 The simplest backend. 8 built-in voices, CPU-friendly, fast.
 
 ```
-pocket-tts-server/
+tts-servers/pocket-tts-server/
   main.py           # FastAPI app
   pyproject.toml    # Deps: fastapi, uvicorn, pocket-tts, scipy, numpy
 ```
@@ -679,7 +679,7 @@ For local dev without Docker, you need three terminals:
 
 ```bash
 # Terminal 1: TTS engine
-cd pocket-tts-server && uv run uvicorn main:app --port 8000
+cd tts-servers/pocket-tts-server && uv run uvicorn main:app --port 8000
 
 # Terminal 2: Orchestrator
 cd orchestrator && uv run uvicorn orchestrator.main:app --port 8000

@@ -30,7 +30,7 @@ __pycache__/
 .venv/
 uv.lock
 !orchestrator/uv.lock
-!pocket-tts-server/uv.lock
+!tts-servers/pocket-tts-server/uv.lock
 !alignment-server/uv.lock
 
 # SQLite
