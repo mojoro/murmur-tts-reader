@@ -64,3 +64,57 @@ async def test_owner_can_fetch_their_audio(client, tmp_path):
         headers={"X-User-Id": str(alice)},
     )
     assert res.status_code == 200
+
+
+async def test_cannot_fetch_other_users_thumbnail(client, tmp_path):
+    alice = await _register(client, "alice@example.com")
+    bob = await _register(client, "bob@example.com")
+    alice_read = await _create_read(client, alice)
+    (tmp_path / "thumbnails" / f"{alice_read}.jpg").write_bytes(b"fakejpeg")
+
+    res = await client.get(
+        f"/thumbnails/{alice_read}",
+        headers={"X-User-Id": str(bob)},
+    )
+    assert res.status_code == 404
+
+
+async def test_cannot_overwrite_other_users_thumbnail(client):
+    alice = await _register(client, "alice@example.com")
+    bob = await _register(client, "bob@example.com")
+    alice_read = await _create_read(client, alice)
+
+    res = await client.post(
+        f"/reads/{alice_read}/thumbnail",
+        headers={"X-User-Id": str(bob), "Content-Type": "application/json"},
+        json={"url": "http://example.com/x.jpg"},
+    )
+    assert res.status_code == 404
+
+
+async def test_cannot_fetch_other_users_image(client, tmp_path):
+    alice = await _register(client, "alice@example.com")
+    bob = await _register(client, "bob@example.com")
+    alice_read = await _create_read(client, alice)
+    img_dir = tmp_path / "images" / str(alice_read)
+    img_dir.mkdir(parents=True, exist_ok=True)
+    (img_dir / "0.jpg").write_bytes(b"fakejpeg")
+
+    res = await client.get(
+        f"/images/{alice_read}/0",
+        headers={"X-User-Id": str(bob)},
+    )
+    assert res.status_code == 404
+
+
+async def test_cannot_upload_image_to_other_users_read(client):
+    alice = await _register(client, "alice@example.com")
+    bob = await _register(client, "bob@example.com")
+    alice_read = await _create_read(client, alice)
+
+    res = await client.post(
+        f"/reads/{alice_read}/images",
+        headers={"X-User-Id": str(bob), "Content-Type": "application/json"},
+        json={"url": "http://example.com/x.jpg", "index": 0},
+    )
+    assert res.status_code == 404

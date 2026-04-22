@@ -13,8 +13,12 @@ async def client(tmp_path, monkeypatch):
     monkeypatch.setattr("orchestrator.config.DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr("orchestrator.config.AUDIO_DIR", tmp_path / "audio")
     monkeypatch.setattr("orchestrator.config.VOICES_DIR", tmp_path / "voices" / "cloned")
+    monkeypatch.setattr("orchestrator.config.THUMBNAILS_DIR", tmp_path / "thumbnails")
+    monkeypatch.setattr("orchestrator.config.IMAGES_DIR", tmp_path / "images")
     (tmp_path / "audio").mkdir()
     (tmp_path / "voices" / "cloned").mkdir(parents=True)
+    (tmp_path / "thumbnails").mkdir()
+    (tmp_path / "images").mkdir()
     await init_db()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
