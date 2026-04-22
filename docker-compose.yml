@@ -37,8 +37,12 @@ services:
       - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
       - MURMUR_ALIGN_URL=http://align:8001
       - MURMUR_DATA_DIR=/app/data
+      - HOME=/app/data
+      - XDG_CACHE_HOME=/app/data/.cache
+      - XDG_DATA_HOME=/app/data/.local/share
       - HF_HOME=/app/data/hf-cache
       - UV_CACHE_DIR=/app/data/uv-cache
+      - UV_PYTHON_INSTALL_DIR=/app/data/uv-python
       - HF_TOKEN=${HF_TOKEN:-}
     depends_on:
       align:
