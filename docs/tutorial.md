@@ -316,7 +316,18 @@ AUDIO_DIR = DATA_DIR / "audio"
 THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 IMAGES_DIR = DATA_DIR / "images"
 VOICES_DIR = DATA_DIR / "voices" / "cloned"
-JWT_SECRET = os.environ.get("MURMUR_JWT_SECRET", "dev-secret-change-in-production")
+
+
+def _resolve_jwt_secret() -> str:
+    secret = os.environ.get("MURMUR_JWT_SECRET")
+    if secret:
+        return secret
+    if os.environ.get("MURMUR_ALLOW_DEV_SECRET") == "1":
+        return "dev-secret-change-in-production-ONLY-for-local-dev"
+    raise RuntimeError("MURMUR_JWT_SECRET is not set. ...")
+
+
+JWT_SECRET = _resolve_jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 72
 
@@ -334,8 +345,12 @@ A few things worth noting:
   orchestrator, even though the standalone dev command uses 8000. That keeps
   both mental models consistent: "8100 is where the *currently active engine*
   lives."
-- `JWT_SECRET` has a default but the production Docker compose will reject
-  that default on purpose; more on that later.
+- `JWT_SECRET` has **no default**. The orchestrator refuses to start unless
+  `MURMUR_JWT_SECRET` is set — generate one with `openssl rand -base64 48`.
+  For local development where you don't want to bother, set
+  `MURMUR_ALLOW_DEV_SECRET=1` and the config falls back to a fixed
+  placeholder. The real secret is also warned-on if shorter than 32 bytes
+  (HS256's `jose` library raises `InsecureKeyLengthWarning` below that).
 
 ### 2.2 Schema and the DB helper
 
@@ -958,8 +973,12 @@ Each router is one concern. They are all included in `main.py`.
 
 **`orchestrator/routers/auth_router.py`** implements `POST /auth/register`,
 `POST /auth/login`, and `GET /auth/me`. Register and login hash/verify with
-bcrypt and return `{user, token}`. `GET /auth/me` uses the
-`get_current_user_id` dependency which reads `X-User-Id`:
+bcrypt and return `{user, token}`. Both are also wrapped in a tiny in-memory
+sliding-window rate limiter (`orchestrator/rate_limit.py`) — 5 logins and 3
+registrations per IP per minute, enough to annoy a casual brute-forcer
+without getting in the way of a family member who fat-fingers their
+password. `GET /auth/me` uses the `get_current_user_id` dependency which
+reads `X-User-Id`:
 
 ```python
 @router.post("/register", response_model=AuthResponse, status_code=201)
@@ -1188,7 +1207,7 @@ can:
 uv --project orchestrator run uvicorn orchestrator.main:app --port 8000
 curl -X POST http://localhost:8000/auth/register \
      -H 'Content-Type: application/json' \
-     -d '{"email":"you@example.com","password":"secret"}'
+     -d '{"email":"you@example.com","password":"hunter2!!"}'
 curl -H "X-User-Id: 1" -X POST http://localhost:8000/reads \
      -H 'Content-Type: application/json' \
      -d '{"title":"Hello","content":"Hello world. How are you?"}'
@@ -1415,13 +1434,15 @@ runtimeConfig: {
 ```
 
 In production these are overridden by `NUXT_ORCHESTRATOR_URL` and
-`NUXT_JWT_SECRET`. The Docker Compose file wires them in:
+`NUXT_JWT_SECRET`. The Docker Compose file wires them in, and the
+`:?` syntax refuses to start the stack if `MURMUR_JWT_SECRET` is missing
+from `.env`:
 
 ```yaml
 app:
   environment:
     - NUXT_ORCHESTRATOR_URL=http://orchestrator:8000
-    - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+    - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
 ```
 
 ### The JWT verifier
@@ -1475,7 +1496,7 @@ export const AUTH_COOKIE_NAME = 'murmur_token'
 export function authCookieOptions() {
   return {
     httpOnly: true,
-    secure: false,
+    secure: !import.meta.dev,
     sameSite: 'lax' as const,
     path: '/',
     maxAge: 72 * 60 * 60, // matches orchestrator JWT_EXPIRY_HOURS
@@ -1484,9 +1505,13 @@ export function authCookieOptions() {
 ```
 
 `httpOnly: true` means the cookie is never accessible to client-side
-JavaScript, which makes XSS-based token theft a non-issue. `secure: false`
-looks wrong, but in dev we run on plain HTTP, and in production Caddy
-terminates TLS so the cookie still travels over HTTPS.
+JavaScript, which makes XSS-based token theft a non-issue. `secure` is
+tied to `!import.meta.dev`: in dev (Nuxt's `nuxi dev`) the cookie is
+allowed on plain HTTP, but in a production build it is `Secure`-only.
+This means plain-HTTP access to a production build — even on a LAN — will
+silently drop the auth cookie and login will appear to "succeed and
+immediately log out." In production, run behind Caddy HTTPS (the default
+compose setup does this).
 
 ### The middleware and proxy
 
@@ -2286,7 +2311,7 @@ services:
       - "4000:3000"
     environment:
       - NUXT_ORCHESTRATOR_URL=http://orchestrator:8000
-      - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+      - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
     depends_on:
       orchestrator:
         condition: service_started
@@ -2295,10 +2320,13 @@ services:
     build:
       context: .
       dockerfile: orchestrator/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
     volumes:
-      - murmur-data:/app/data
+      - ./data:/app/data
     environment:
-      - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+      - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
       - MURMUR_ALIGN_URL=http://align:8001
       - MURMUR_DATA_DIR=/app/data
       - HF_TOKEN=${HF_TOKEN:-}
@@ -2352,8 +2380,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Non-root runtime user. UID/GID are build args so the image can be rebuilt
+# on hosts where the bind-mounted ./data is owned by a non-1000 UID.
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID app && useradd -u $UID -g $GID -m -d /home/app -s /bin/bash app
 WORKDIR /app
-COPY orchestrator/pyproject.toml orchestrator/uv.lock orchestrator/
+RUN chown $UID:$GID /app
+USER app
+ENV HOME=/home/app
+ENV PATH=/home/app/.local/bin:$PATH
+
+COPY --chown=app:app orchestrator/pyproject.toml orchestrator/uv.lock orchestrator/
 RUN cd orchestrator && uv sync --frozen --no-dev --no-install-project
 
 # Pre-install Pocket TTS so first boot has a working engine
@@ -2798,11 +2837,26 @@ curl -X POST -H 'Content-Type: application/json' \
 
 ### Running with Docker
 
-Copy the example env file and set the two required values:
+Copy the example env file and set the two required values. `MURMUR_JWT_SECRET`
+is mandatory — compose refuses to start without it:
 
 ```bash
 cp .env.example .env
-# Edit .env: MURMUR_HOST=<your-LAN-IP>, MURMUR_JWT_SECRET=<long-random-string>
+# Edit .env:
+#   MURMUR_HOST=<your-LAN-IP>
+#   MURMUR_JWT_SECRET=<paste the output of:  openssl rand -base64 48>
+```
+
+The orchestrator container runs as a non-root user (UID 1000 / GID 1000 by
+default) and bind-mounts `./data` from the host. On a single-user Linux
+install this usually just works. If your host UID differs (`id -u`), either
+override the build args in `.env` (uncomment `UID=` / `GID=`) and rebuild, or
+chown the data directory to match the container user before first run:
+
+```bash
+mkdir -p data && sudo chown 1000:1000 data
+# …or, to build the image for your current host user:
+UID=$(id -u) GID=$(id -g) docker compose up --build
 ```
 
 Minimal production stack (Caddy + app + orchestrator):
@@ -2825,7 +2879,10 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 First-time phone setup: visit `http://<LAN_IP>` over HTTP to download
 `ca.crt`, install it on the device, then open `https://<LAN_IP>` to install
-the PWA.
+the PWA. Note that the app itself must be accessed over HTTPS: a production
+build marks the auth cookie `Secure`, so `http://<LAN_IP>:4000` (the
+bypass-Caddy port) will appear to log in and then immediately drop the
+cookie. Plain HTTP only works against `nuxi dev`.
 
 That is Murmur from the bottom up. Five TTS engines, one orchestrator, one
 alignment server, one BFF, one PWA, one Caddy reverse proxy, and all of the
