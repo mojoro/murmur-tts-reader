@@ -6,8 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 import aiosqlite
 import httpx
 
-_VOICE_NAME_RE = re.compile(r"^[A-Za-z0-9 _-]{1,64}$")
-
 from orchestrator.db import get_db
 from orchestrator.auth import get_current_user_id
 from orchestrator.models import VoiceResponse
@@ -16,6 +14,8 @@ import orchestrator.config as config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voices", tags=["voices"])
+
+_VOICE_NAME_RE = re.compile(r"^[A-Za-z0-9 _-]{1,64}$")
 
 
 @router.get("", response_model=list[VoiceResponse])
