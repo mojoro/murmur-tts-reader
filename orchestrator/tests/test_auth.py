@@ -60,3 +60,37 @@ def test_jwt_secret_explicit_value_wins(monkeypatch):
     monkeypatch.setenv("MURMUR_JWT_SECRET", "a" * 32)
     monkeypatch.delenv("MURMUR_ALLOW_DEV_SECRET", raising=False)
     assert _resolve_jwt_secret() == "a" * 32
+
+
+async def test_login_rate_limited(client):
+    await client.post(
+        "/auth/register",
+        json={"email": "rl@example.com", "password": "password123"},
+    )
+    for _ in range(5):
+        res = await client.post(
+            "/auth/login",
+            json={"email": "rl@example.com", "password": "wrong"},
+        )
+        assert res.status_code == 401
+
+    res = await client.post(
+        "/auth/login",
+        json={"email": "rl@example.com", "password": "wrong"},
+    )
+    assert res.status_code == 429
+
+
+async def test_register_rate_limited(client):
+    for i in range(3):
+        res = await client.post(
+            "/auth/register",
+            json={"email": f"rl{i}@example.com", "password": "password123"},
+        )
+        assert res.status_code == 201
+
+    res = await client.post(
+        "/auth/register",
+        json={"email": "rl4@example.com", "password": "password123"},
+    )
+    assert res.status_code == 429

@@ -6,13 +6,18 @@ import aiosqlite
 from orchestrator.db import get_db
 from orchestrator.auth import hash_password, verify_password, create_token, get_current_user_id
 from orchestrator.models import RegisterRequest, LoginRequest, AuthResponse, UserResponse
+from orchestrator.rate_limit import rate_limit_login, rate_limit_register
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AuthResponse, status_code=201)
-async def register(req: RegisterRequest, db: aiosqlite.Connection = Depends(get_db)):
+async def register(
+    req: RegisterRequest,
+    _: None = Depends(rate_limit_register),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     logger.info("Register attempt for email=%s", req.email)
     existing = await db.execute_fetchall("SELECT id FROM users WHERE email = ?", (req.email,))
     if existing:
@@ -37,7 +42,11 @@ async def register(req: RegisterRequest, db: aiosqlite.Connection = Depends(get_
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(req: LoginRequest, db: aiosqlite.Connection = Depends(get_db)):
+async def login(
+    req: LoginRequest,
+    _: None = Depends(rate_limit_login),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     logger.info("Login attempt for email=%s", req.email)
     rows = await db.execute_fetchall("SELECT * FROM users WHERE email = ?", (req.email,))
     if not rows:

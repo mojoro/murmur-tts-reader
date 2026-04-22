@@ -60,3 +60,12 @@ async def disable_job_worker(monkeypatch):
     monkeypatch.setattr("orchestrator.job_worker.job_worker", fresh)
     monkeypatch.setattr("orchestrator.main.job_worker", fresh)
     yield fresh
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_rate_limiters():
+    """Clear rate-limit hit counts between tests so they don't bleed."""
+    from orchestrator.rate_limit import reset_all_limiters
+    reset_all_limiters()
+    yield
+    reset_all_limiters()
