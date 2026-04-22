@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: Murmur Alignment Server API
+  version: 1.0.0
+  description: |
+    Optional FastAPI service that runs WhisperX forced-alignment on a
+    TTS-generated WAV plus its source text, returning per-word timestamps
+    used by the frontend for karaoke-style highlighting.
+
+    **Audience:** the Murmur orchestrator. Not exposed to browsers.
+
+    **Invocation pattern:** after each segment's TTS audio is generated, the
+    orchestrator's job worker POSTs the WAV + text to `/align`. Failure is
+    tolerated — the worker logs "alignment unavailable (this is ok)" and
+    stores the segment without word timings (`orchestrator/job_worker.py:241-255`).
+
+    **Deployment:** gated behind the Docker Compose `full` profile
+    (`docker-compose.yml:50-51`). Absent by default; the orchestrator
+    targets `MURMUR_ALIGN_URL` (default `http://localhost:8001`).
+
+    **Authentication:** none. Loopback-only service, not exposed externally.
+
+servers:
+  - url: http://align:8001
+    description: Inside the Docker Compose network (service name `align`, `--profile full`)
+  - url: http://localhost:8001
+    description: Dev (alignment-server run directly via uv)
+
+tags:
+  - name: Alignment
+    description: WhisperX forced-alignment of audio + text
+  - name: Health
+    description: Liveness probe
+
+paths:
+  /align:
+    post:
+      operationId: align
+      summary: Forced-align a WAV with its source text
+      description: |
+        Loads the uploaded audio at 16 kHz (WhisperX internal rate), runs the
+        pre-loaded alignment model, and returns the list of word-level time
+        ranges. Source: `alignment-server/main.py:66-77`.
+
+        Alignment is performed for a single English segment at a time — the
+        model is loaded with `language_code="en"` at startup
+        (`alignment-server/main.py:23-25`).
+      tags: [Alignment]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [audio, text]
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: |
+                    WAV file to align. Any sample rate accepted — WhisperX
+                    resamples internally.
+                text:
+                  type: string
+                  description: The exact text that was synthesized into the audio.
+      responses:
+        "200":
+          description: Word timings (may be an empty list if alignment found no words)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlignmentResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          description: |
+            Alignment model failure. The orchestrator treats any non-2xx as
+            "alignment unavailable" and continues without word timings
+            (`orchestrator/job_worker.py:254-255`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness + model-ready probe
+      description: |
+        Returns the service state. `model_loaded` is `false` until the
+        `lifespan` startup finishes loading the WhisperX model (can take
+        several seconds on first boot). Source: `alignment-server/main.py:80-86`.
+      tags: [Health]
+      responses:
+        "200":
+          description: Health payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+components:
+  schemas:
+    WordTiming:
+      type: object
+      required: [word, start, end]
+      properties:
+        word:
+          type: string
+          description: The word as WhisperX tokenized it (may include punctuation).
+        start:
+          type: number
+          format: float
+          description: Start time in seconds from the beginning of the audio, rounded to 3 dp.
+        end:
+          type: number
+          format: float
+          description: End time in seconds, rounded to 3 dp.
+      example:
+        word: "hello"
+        start: 0.123
+        end: 0.456
+
+    AlignmentResponse:
+      type: object
+      required: [words]
+      properties:
+        words:
+          type: array
+          description: |
+            Word timings in order. Only words the model successfully aligned
+            (i.e. both `start` and `end` were produced) are included; silently
+            dropped words never appear (`alignment-server/main.py:57-62`).
+          items:
+            $ref: "#/components/schemas/WordTiming"
+
+    HealthResponse:
+      type: object
+      required: [status, model_loaded, device]
+      properties:
+        status:
+          type: string
+          description: Always `"ok"` when the process is responding.
+          example: ok
+        model_loaded:
+          type: boolean
+          description: |
+            `true` once the WhisperX alignment model has been loaded by the
+            `lifespan` startup hook.
+        device:
+          type: string
+          description: |
+            Torch device the model is running on. `"cuda"` if a GPU is
+            available at startup, otherwise `"cpu"`
+            (`alignment-server/main.py:21`).
+          examples: [cpu, cuda]
+
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+
+  responses:
+    ValidationError:
+      description: FastAPI request validation failure (missing/invalid fields)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

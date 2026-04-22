@@ -1,0 +1,497 @@
+openapi: 3.1.0
+info:
+  title: Murmur TTS Engine API
+  version: 1.0.0
+  description: |
+    Shared HTTP contract that all five pluggable TTS engines implement. The
+    orchestrator spawns exactly one engine subprocess at a time on port
+    `MURMUR_ENGINE_PORT` (default `8100`) and calls these endpoints. Engines are
+    not exposed to browsers.
+
+    ## Engines
+    Five backends share this contract (see `orchestrator/engine_registry.py`):
+
+    - **pocket-tts** - CPU-friendly, built-in voices, fast. Default.
+    - **xtts-v2** - multilingual cloning.
+    - **f5-tts** - clone-only, auto-transcribes reference audio.
+    - **gpt-sovits** - clone-only, auto-trims reference audio, English/Chinese/Japanese.
+    - **cosyvoice2** - zero-shot / cross-lingual synthesis.
+
+    Only one engine runs at a time; the orchestrator stops the previous engine
+    before starting a new one. From the orchestrator's perspective all five
+    engines are interchangeable at the HTTP level, with the divergences noted
+    below.
+
+    ## Authentication
+    **None.** The engine listens only on loopback inside the orchestrator
+    container and is reachable exclusively through the orchestrator's job
+    worker (`orchestrator/job_worker.py`), voices router
+    (`orchestrator/routers/voices.py`), engine manager
+    (`orchestrator/engine_manager.py`), and startup sync
+    (`orchestrator/main.py`). No `security` block is defined; there is no
+    access control at this layer.
+
+    ## Cross-engine divergences (summary)
+
+    The endpoints below are implemented by every engine, but behavior differs:
+
+    | Surface | Divergence |
+    |---|---|
+    | `POST /tts/generate` body | `voice` defaults to `"alba"` on pocket-tts; `"default"` on the other four. |
+    | `POST /tts/generate` behavior | pocket-tts can synthesize built-in voices with no cloning; xtts-v2, f5-tts, gpt-sovits, cosyvoice2 are **clone-only** and return `404` when `voice` has no reference WAV. |
+    | `POST /tts/generate` `language` | Accepted by all five; actually used by xtts-v2 (default `"en"`) and gpt-sovits (mapped to `en`/`zh`/`ja`/`auto`). Ignored silently by pocket-tts, f5-tts, cosyvoice2. |
+    | `POST /tts/clone-voice` `prompt_text` | Only cosyvoice2 reads this field (saves a `<voice>.txt` transcript used for zero-shot inference). Sent conditionally by the orchestrator. Other engines ignore it. |
+    | `GET /tts/voices` `builtin` | Non-empty only on pocket-tts (8 voices). Always `[]` on the other four. |
+    | `GET /health` `backend` | `"pocket-tts"`, `"xtts-v2"`, `"f5-tts"`, `"gpt-sovits"`, `"cosyvoice"`. Note that cosyvoice2's engine registry key is `cosyvoice2` but its health banner reports `"cosyvoice"`. |
+
+servers:
+  - url: http://localhost:8100
+    description: The single active engine (MURMUR_ENGINE_PORT)
+
+tags:
+  - name: TTS
+    description: Synthesis and voice-catalog endpoints.
+  - name: Health
+    description: Liveness/readiness for the engine manager.
+
+paths:
+  /tts/voices:
+    get:
+      operationId: listVoices
+      summary: List voices available on this engine
+      description: |
+        Returns the catalog of voices the engine can use right now. The
+        orchestrator calls this on engine startup (`orchestrator/main.py`
+        `sync_builtin_voices`), from `POST /voices/sync`, and before every
+        generation to check whether it needs to copy a cloned voice WAV to the
+        engine (`orchestrator/job_worker.py` `_ensure_voice_on_engine`).
+
+        - `builtin` is populated only by **pocket-tts** (its 8 character voices).
+          All other engines return `builtin: []`.
+        - `custom` is the list of `*.wav` basenames that have been cloned into
+          the engine's local `voices/` directory.
+      tags:
+        - TTS
+      responses:
+        "200":
+          description: Voice catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceCatalog"
+              examples:
+                pocketTts:
+                  summary: pocket-tts (built-in voices present)
+                  value:
+                    builtin:
+                      - alba
+                      - marius
+                      - javert
+                      - jean
+                      - fantine
+                      - cosette
+                      - eponine
+                      - azelma
+                    custom:
+                      - my-cloned-voice
+                cloneOnly:
+                  summary: xtts-v2 / f5-tts / gpt-sovits / cosyvoice2
+                  value:
+                    builtin: []
+                    custom:
+                      - my-cloned-voice
+
+  /tts/generate:
+    post:
+      operationId: generateAudio
+      summary: Synthesize speech
+      description: |
+        Generate a single WAV for the given text and voice. The orchestrator
+        calls this once per sentence-level segment from
+        `orchestrator/job_worker.py` `_process_segment`, streaming the binary
+        response into `<AUDIO_DIR>/<read_id>/<segment_index>.wav`.
+
+        Behavior is the same shape on every engine but semantics differ:
+
+        - **pocket-tts** - `voice` may be a built-in (see `GET /tts/voices`) or
+          a cloned WAV. Uses `language` only as a passthrough (ignored at
+          synthesis time).
+        - **xtts-v2** - **Clone-only.** `voice` must correspond to a cloned WAV.
+          If missing, returns `404`. `language` defaults to `"en"`.
+        - **f5-tts** - **Clone-only.** Auto-transcribes the reference with an
+          empty `ref_text`. `language` is accepted but ignored.
+        - **gpt-sovits** - **Clone-only.** Auto-trims reference audio longer
+          than 10s to 9s. `language` is mapped: `en`/`english` -> `en`,
+          `zh`/`chinese` -> `zh`, `ja`/`japanese` -> `ja`, anything else or
+          null -> `auto`.
+        - **cosyvoice2** - **Clone-only.** Uses `inference_zero_shot` when a
+          prompt transcript was saved during cloning, otherwise
+          `inference_cross_lingual`. `language` is accepted but ignored.
+
+        The request body is `application/json`. This differs from
+        `/tts/clone-voice` which is `multipart/form-data`.
+      tags:
+        - TTS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateRequest"
+            examples:
+              minimal:
+                summary: Minimal request (orchestrator's default)
+                value:
+                  text: "Hello, world."
+                  voice: "alba"
+              withLanguage:
+                summary: With language (xtts-v2 / gpt-sovits)
+                value:
+                  text: "Bonjour le monde."
+                  voice: "my-cloned-voice"
+                  language: "en"
+      responses:
+        "200":
+          description: WAV audio stream. 16-bit PCM mono. Sample rate depends on engine (pocket-tts 24000, xtts-v2 ~24000, f5-tts model-provided, gpt-sovits 32000, cosyvoice2 model-provided).
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              description: "Always `inline` with an engine-specific filename (e.g. `pocket_tts.wav`, `xtts_tts.wav`, `f5tts_output.wav`, `gptsovits_tts.wav`, `cosyvoice_tts.wav`)."
+              schema:
+                type: string
+        "404":
+          description: |
+            Voice not found on the engine. Raised by xtts-v2, f5-tts,
+            gpt-sovits, and cosyvoice2 when the referenced `voice` has no
+            cloned WAV in the engine's `voices/` directory. pocket-tts raises
+            this only when the voice is neither a built-in nor a cloned WAV.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineError"
+              example:
+                detail: "Voice 'my-cloned-voice' not found. Clone a voice first."
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          description: |
+            Internal synthesis error. The engine wraps any exception from the
+            underlying model in a `500`. The traceback is logged by the engine
+            process; the response body carries `detail` with the exception
+            message. gpt-sovits additionally returns `500` with
+            `detail: "No audio generated"` when the model yields no chunks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineError"
+
+  /tts/clone-voice:
+    post:
+      operationId: cloneVoice
+      summary: Register a reference voice
+      description: |
+        Upload a WAV to the engine's local `voices/` directory so it can be
+        used as `voice` in subsequent `/tts/generate` calls.
+
+        Called from two places in the orchestrator:
+
+        1. `orchestrator/routers/voices.py` `POST /voices/clone` (the user
+           clones a voice through the UI). Sends `name`, `file`, and - only
+           when the user provided transcript text - `prompt_text`.
+        2. `orchestrator/job_worker.py` `_ensure_voice_on_engine` (a job
+           references a voice the engine does not have yet - copied from
+           orchestrator storage). Sends `name` and `file` only.
+
+        The engine sanitizes `name` by stripping characters outside
+        `[A-Za-z0-9_- ]`; if the result is empty it falls back to an 8-char
+        hex UUID. The saved basename is returned in `voice`.
+
+        `prompt_text` is **only** read by cosyvoice2, which persists it to
+        `<voices>/<name>.txt` and uses it for zero-shot inference. Other
+        engines silently ignore unknown form fields.
+      tags:
+        - TTS
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CloneVoiceRequest"
+            encoding:
+              file:
+                contentType: audio/wav
+      responses:
+        "200":
+          description: Voice registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloneVoiceResponse"
+              example:
+                voice: "my-cloned-voice"
+                message: "Voice 'my-cloned-voice' cloned successfully"
+        "400":
+          description: |
+            Rejected upload. All engines raise `400 "Upload a WAV file"` when
+            the uploaded file has no filename or does not end in `.wav`
+            (cosyvoice2 performs the check case-insensitively; the others do
+            not).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineError"
+              example:
+                detail: "Upload a WAV file"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /health:
+    get:
+      operationId: getHealth
+      summary: Engine liveness / readiness
+      description: |
+        Polled by `orchestrator/engine_manager.py` after subprocess launch to
+        detect when the engine has bound its port, and periodically to decide
+        whether the engine should be considered up. Returns `200` once the
+        HTTP server is listening, even before the model weights have loaded;
+        `model_loaded` reflects whether the first generate call has populated
+        the global model cache.
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Engine is reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                pocketTts:
+                  value:
+                    status: ok
+                    model_loaded: true
+                    backend: pocket-tts
+                xtts:
+                  value:
+                    status: ok
+                    model_loaded: false
+                    backend: xtts-v2
+                f5:
+                  value:
+                    status: ok
+                    model_loaded: true
+                    backend: f5-tts
+                gptSovits:
+                  value:
+                    status: ok
+                    model_loaded: true
+                    backend: gpt-sovits
+                cosyvoice:
+                  value:
+                    status: ok
+                    model_loaded: true
+                    backend: cosyvoice
+
+components:
+  schemas:
+    VoiceCatalog:
+      type: object
+      required:
+        - builtin
+        - custom
+      properties:
+        builtin:
+          type: array
+          description: |
+            Voices baked into the engine. Populated only by pocket-tts
+            (its 8 character voices). Always an empty array on xtts-v2,
+            f5-tts, gpt-sovits, and cosyvoice2.
+          items:
+            type: string
+          example:
+            - alba
+            - marius
+        custom:
+          type: array
+          description: |
+            Cloned voices known to the engine. The entries are the basenames
+            (without `.wav`) of files in the engine's local `voices/`
+            directory.
+          items:
+            type: string
+          example:
+            - my-cloned-voice
+
+    GenerateRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: |
+            The text to synthesize. The orchestrator supplies one sentence-
+            level segment at a time. No explicit length limit is enforced by
+            the engines, but long inputs will hit model-specific context
+            limits.
+          example: "Hello, world."
+        voice:
+          type: string
+          description: |
+            The voice identifier. Must match either a `builtin` entry
+            (pocket-tts only) or a `custom` entry from `GET /tts/voices`.
+
+            The Pydantic default is `"alba"` on pocket-tts and `"default"` on
+            the other four engines. The orchestrator always sends an explicit
+            value from `orchestrator/job_worker.py` `_process_segment`.
+          default: default
+          example: "alba"
+        language:
+          type:
+            - string
+            - "null"
+          description: |
+            Optional IETF-ish language hint. **Accepted by every engine**
+            (declared on every Pydantic `GenerateRequest`) but only used by:
+
+            - **xtts-v2** - passed through to Coqui TTS; defaults to `"en"`
+              when null.
+            - **gpt-sovits** - mapped via a lookup table: `en`/`english`,
+              `zh`/`chinese`, `ja`/`japanese`; anything else or null -> `auto`.
+
+            pocket-tts, f5-tts, and cosyvoice2 accept the field on the wire
+            and ignore it.
+          example: "en"
+      additionalProperties: false
+
+    CloneVoiceRequest:
+      type: object
+      required:
+        - name
+        - file
+      properties:
+        name:
+          type: string
+          description: |
+            Desired voice identifier. The engine will strip characters
+            outside `[A-Za-z0-9_- ]` and, if the result is empty, replace it
+            with an 8-char hex UUID. The sanitized value is returned in
+            `CloneVoiceResponse.voice`.
+          example: "my-cloned-voice"
+        file:
+          type: string
+          format: binary
+          description: |
+            Reference audio. Must be a `.wav` file (the engine checks the
+            filename extension and returns `400 "Upload a WAV file"` if it is
+            missing or not `.wav`; cosyvoice2's check is case-insensitive).
+
+            Recommended duration: 3-10 seconds. gpt-sovits auto-trims anything
+            longer than 10 seconds down to 9 seconds at generation time.
+        prompt_text:
+          type: string
+          description: |
+            Optional transcription of `file`. **Only cosyvoice2 reads this
+            field** - it saves the text alongside the WAV as `<name>.txt`
+            and uses it to select between `inference_zero_shot` (when present)
+            and `inference_cross_lingual` (when absent or equal to the
+            generic fallback).
+
+            The orchestrator forwards this from
+            `POST /voices/clone` only when the user supplied it
+            (`orchestrator/routers/voices.py` lines 107-108). `job_worker.py`
+            never sends it. All non-cosyvoice2 engines ignore the field.
+
+    CloneVoiceResponse:
+      type: object
+      required:
+        - voice
+        - message
+      properties:
+        voice:
+          type: string
+          description: Sanitized voice name as stored on the engine.
+          example: "my-cloned-voice"
+        message:
+          type: string
+          description: Human-readable confirmation.
+          example: "Voice 'my-cloned-voice' cloned successfully"
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - model_loaded
+        - backend
+      properties:
+        status:
+          type: string
+          description: Always `"ok"` once the process is serving HTTP.
+          const: ok
+        model_loaded:
+          type: boolean
+          description: |
+            `true` once the engine has loaded its model weights into the
+            global singleton. Some engines warm this up during FastAPI
+            `lifespan` (pocket-tts), others load lazily on the first
+            `/tts/generate` request.
+        backend:
+          type: string
+          description: |
+            Self-reported engine identifier. Note that cosyvoice2's registry
+            key is `cosyvoice2` but its health response reports `cosyvoice`.
+          enum:
+            - pocket-tts
+            - xtts-v2
+            - f5-tts
+            - gpt-sovits
+            - cosyvoice
+
+    EngineError:
+      type: object
+      description: |
+        FastAPI's default `HTTPException` response shape. Engines raise this
+        with a plain string `detail`.
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          example: "Voice 'my-cloned-voice' not found. Clone a voice first."
+
+    ValidationError:
+      type: object
+      description: FastAPI's default request-validation error envelope.
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  oneOf:
+                    - type: string
+                    - type: integer
+              msg:
+                type: string
+              type:
+                type: string
+
+  responses:
+    ValidationError:
+      description: Request body or form failed Pydantic validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationError"
+          example:
+            detail:
+              - loc: ["body", "text"]
+                msg: "Field required"
+                type: "missing"
