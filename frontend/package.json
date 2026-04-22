@@ -23,6 +23,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "@vite-pwa/nuxt": "^1.1.1",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.0.1",
