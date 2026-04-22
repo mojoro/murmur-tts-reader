@@ -1,9 +1,12 @@
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 import aiosqlite
 import httpx
+
+_VOICE_NAME_RE = re.compile(r"^[A-Za-z0-9 _-]{1,64}$")
 
 from orchestrator.db import get_db
 from orchestrator.auth import get_current_user_id
@@ -89,6 +92,12 @@ async def clone_voice(
     db: aiosqlite.Connection = Depends(get_db),
 ):
     """Clone a voice by uploading a WAV file to the active TTS engine."""
+    if not _VOICE_NAME_RE.fullmatch(name):
+        raise HTTPException(
+            status_code=400,
+            detail="Voice name must be 1-64 chars, letters/digits/space/dash/underscore only",
+        )
+
     engine_url = engine_manager.get_engine_url()
     if not engine_url:
         logger.warning("Voice clone failed: no engine running (user=%d, name=%s)", user_id, name)
