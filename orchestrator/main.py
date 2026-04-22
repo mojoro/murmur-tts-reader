@@ -1,13 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+import aiosqlite
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
 import orchestrator.config as config
+from orchestrator.auth import get_current_user_id
 from orchestrator.config import AUDIO_DIR, DATA_DIR
-from orchestrator.db import init_db, open_db
+from orchestrator.db import get_db, init_db, open_db
 from orchestrator.engine_manager import engine_manager
 from orchestrator.job_worker import job_worker
 from orchestrator.routers.auth_router import router as auth_router
@@ -105,8 +107,27 @@ app.include_router(backends_router)
 app.include_router(queue_router)
 
 
+async def _assert_read_owned(
+    read_id: int,
+    user_id: int,
+    db: aiosqlite.Connection,
+) -> None:
+    """404 if read_id doesn't belong to user_id. Use before serving or
+    writing any filesystem artifact scoped by read_id."""
+    rows = await db.execute_fetchall(
+        "SELECT 1 FROM reads WHERE id = ? AND user_id = ?", (read_id, user_id)
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.get("/audio/{read_id}/bundle")
-async def serve_audio_bundle(read_id: int, segments: str | None = None):
+async def serve_audio_bundle(
+    read_id: int,
+    segments: str | None = None,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     """Serve audio segments for a read as a single zip (ZIP_STORED).
 
     If ``segments`` is provided (comma-separated indices), only those
@@ -114,6 +135,8 @@ async def serve_audio_bundle(read_id: int, segments: str | None = None):
     """
     import io
     import zipfile
+
+    await _assert_read_owned(read_id, user_id, db)
 
     audio_dir = config.AUDIO_DIR / str(read_id)
     if not audio_dir.exists():
@@ -148,7 +171,13 @@ async def serve_audio_bundle(read_id: int, segments: str | None = None):
 
 
 @app.get("/audio/{read_id}/{segment_index}")
-async def serve_audio(read_id: int, segment_index: int):
+async def serve_audio(
+    read_id: int,
+    segment_index: int,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    await _assert_read_owned(read_id, user_id, db)
     path = config.AUDIO_DIR / str(read_id) / f"{segment_index}.wav"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Audio not found")
@@ -162,7 +191,13 @@ THUMB_MEDIA_TYPES = {
 
 
 @app.post("/reads/{read_id}/thumbnail", status_code=204)
-async def upload_thumbnail(read_id: int, request: Request):
+async def upload_thumbnail(
+    read_id: int,
+    request: Request,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    await _assert_read_owned(read_id, user_id, db)
     content_type = request.headers.get("content-type", "")
 
     if "multipart" in content_type:
@@ -202,7 +237,12 @@ async def upload_thumbnail(read_id: int, request: Request):
 
 
 @app.get("/thumbnails/{read_id}")
-async def serve_thumbnail(read_id: int):
+async def serve_thumbnail(
+    read_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    await _assert_read_owned(read_id, user_id, db)
     for ext, media_type in THUMB_MEDIA_TYPES.items():
         path = config.THUMBNAILS_DIR / f"{read_id}{ext}"
         if path.exists():
@@ -260,8 +300,14 @@ def _validate_external_url(url: str):
 
 
 @app.post("/reads/{read_id}/images", status_code=201)
-async def upload_read_image(read_id: int, request: Request):
+async def upload_read_image(
+    read_id: int,
+    request: Request,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     """Upload an image for a read. Accepts multipart file or JSON {url, index}."""
+    await _assert_read_owned(read_id, user_id, db)
     content_type = request.headers.get("content-type", "")
 
     if "multipart" in content_type:
@@ -314,7 +360,13 @@ async def upload_read_image(read_id: int, request: Request):
 
 
 @app.get("/images/{read_id}/{index}")
-async def serve_read_image(read_id: int, index: int):
+async def serve_read_image(
+    read_id: int,
+    index: int,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    await _assert_read_owned(read_id, user_id, db)
     img_dir = config.IMAGES_DIR / str(read_id)
     for ext, media_type in IMAGE_MEDIA_TYPES.items():
         path = img_dir / f"{index}{ext}"

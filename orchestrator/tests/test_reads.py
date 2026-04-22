@@ -4,7 +4,7 @@ pytestmark = pytest.mark.anyio
 
 
 async def _register(client) -> int:
-    res = await client.post("/auth/register", json={"email": "reader@test.com", "password": "p"})
+    res = await client.post("/auth/register", json={"email": "reader@test.com", "password": "password1"})
     return res.json()["user"]["id"]
 
 
@@ -57,8 +57,8 @@ async def test_delete_read(client):
 
 
 async def test_user_isolation(client):
-    r1 = await client.post("/auth/register", json={"email": "u1@test.com", "password": "p"})
-    r2 = await client.post("/auth/register", json={"email": "u2@test.com", "password": "p"})
+    r1 = await client.post("/auth/register", json={"email": "u1@test.com", "password": "password1"})
+    r2 = await client.post("/auth/register", json={"email": "u2@test.com", "password": "password1"})
     uid1, uid2 = r1.json()["user"]["id"], r2.json()["user"]["id"]
     await client.post("/reads", json={"title": "U1", "content": "Mine."}, headers={"X-User-Id": str(uid1)})
     res = await client.get("/reads", headers={"X-User-Id": str(uid2)})

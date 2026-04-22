@@ -32,7 +32,7 @@ export const AUTH_COOKIE_NAME = 'murmur_token'
 export function authCookieOptions() {
   return {
     httpOnly: true,
-    secure: false,
+    secure: !import.meta.dev,
     sameSite: 'lax' as const,
     path: '/',
     maxAge: 72 * 60 * 60, // 72 hours — matches orchestrator JWT_EXPIRY_HOURS

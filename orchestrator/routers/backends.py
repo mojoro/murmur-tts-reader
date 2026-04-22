@@ -1,9 +1,10 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
+from orchestrator.auth import get_current_user_id
 from orchestrator.db import open_db
 from orchestrator.engine_manager import engine_manager
 from orchestrator.engine_registry import ENGINES
@@ -32,7 +33,10 @@ async def list_backends():
 
 
 @router.post("/select", response_model=BackendResponse)
-async def select_backend(req: SelectBackendRequest):
+async def select_backend(
+    req: SelectBackendRequest,
+    user_id: int = Depends(get_current_user_id),
+):
     logger.info("Selecting engine: %s", req.name)
     if req.name not in ENGINES:
         logger.error("Unknown engine requested: %s", req.name)
@@ -60,7 +64,10 @@ async def select_backend(req: SelectBackendRequest):
 
 
 @router.post("/install")
-async def install_backend(req: SelectBackendRequest):
+async def install_backend(
+    req: SelectBackendRequest,
+    user_id: int = Depends(get_current_user_id),
+):
     logger.info("Install requested for engine: %s", req.name)
     if req.name not in ENGINES:
         logger.error("Unknown engine requested for install: %s", req.name)
@@ -89,7 +96,10 @@ async def _install_engine_task(name: str):
 
 
 @router.delete("/{name}")
-async def uninstall_backend(name: str):
+async def uninstall_backend(
+    name: str,
+    user_id: int = Depends(get_current_user_id),
+):
     logger.info("Uninstall requested for engine: %s", name)
     if name not in ENGINES:
         raise HTTPException(status_code=404, detail=f"Unknown engine: {name}")

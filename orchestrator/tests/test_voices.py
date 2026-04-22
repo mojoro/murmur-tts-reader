@@ -4,7 +4,7 @@ pytestmark = pytest.mark.anyio
 
 
 async def _auth(client) -> tuple[int, dict]:
-    res = await client.post("/auth/register", json={"email": "v@test.com", "password": "p"})
+    res = await client.post("/auth/register", json={"email": "v@test.com", "password": "password1"})
     uid = res.json()["user"]["id"]
     return uid, {"X-User-Id": str(uid)}
 
@@ -39,3 +39,25 @@ async def test_delete_own_clone(client):
         voice_id = cursor.lastrowid
     res = await client.delete(f"/voices/{voice_id}", headers=h)
     assert res.status_code == 204
+
+
+async def test_voice_clone_rejects_path_traversal(client):
+    _, h = await _auth(client)
+    files = {"file": ("x.wav", b"RIFF...", "audio/wav")}
+    data = {"name": "../../../../etc/passwd"}
+    res = await client.post("/voices/clone", headers=h, files=files, data=data)
+    assert res.status_code == 400
+
+
+async def test_voice_clone_rejects_empty_name(client):
+    _, h = await _auth(client)
+    files = {"file": ("x.wav", b"RIFF...", "audio/wav")}
+    res = await client.post("/voices/clone", headers=h, files=files, data={"name": ""})
+    assert res.status_code in (400, 422)
+
+
+async def test_voice_clone_rejects_slash_in_name(client):
+    _, h = await _auth(client)
+    files = {"file": ("x.wav", b"RIFF...", "audio/wav")}
+    res = await client.post("/voices/clone", headers=h, files=files, data={"name": "foo/bar"})
+    assert res.status_code == 400

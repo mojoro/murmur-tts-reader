@@ -30,8 +30,10 @@ def decode_token(token: str) -> int:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-async def get_current_user_id(x_user_id: str = Header()) -> int:
+async def get_current_user_id(x_user_id: str | None = Header(default=None)) -> int:
     """Used when Nuxt BFF passes the validated user_id in a header."""
+    if x_user_id is None:
+        raise HTTPException(status_code=401, detail="Missing user ID")
     try:
         return int(x_user_id)
     except (ValueError, TypeError):

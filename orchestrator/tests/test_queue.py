@@ -7,7 +7,7 @@ pytestmark = pytest.mark.anyio
 async def _setup_with_job(client, reset_engine_manager):
     """Register user, create read, create a job."""
     res = await client.post(
-        "/auth/register", json={"email": "queue@test.com", "password": "p"}
+        "/auth/register", json={"email": "queue@test.com", "password": "password1"}
     )
     uid = res.json()["user"]["id"]
     headers = {"X-User-Id": str(uid)}
@@ -33,7 +33,7 @@ async def _setup_with_job(client, reset_engine_manager):
 
 async def test_list_queue_empty(client):
     res = await client.post(
-        "/auth/register", json={"email": "q1@test.com", "password": "p"}
+        "/auth/register", json={"email": "q1@test.com", "password": "password1"}
     )
     headers = {"X-User-Id": str(res.json()["user"]["id"])}
     res = await client.get("/queue", headers=headers)
@@ -80,7 +80,7 @@ async def test_cancel_other_users_job(client, reset_engine_manager):
     _, _, _, job_id = await _setup_with_job(client, reset_engine_manager)
     # Register second user
     res = await client.post(
-        "/auth/register", json={"email": "q2@test.com", "password": "p"}
+        "/auth/register", json={"email": "q2@test.com", "password": "password1"}
     )
     headers2 = {"X-User-Id": str(res.json()["user"]["id"])}
     res = await client.delete(f"/queue/{job_id}", headers=headers2)
@@ -91,7 +91,7 @@ async def test_queue_user_isolation(client, reset_engine_manager):
     _, headers1, _, _ = await _setup_with_job(client, reset_engine_manager)
     # Second user sees empty queue
     res = await client.post(
-        "/auth/register", json={"email": "q3@test.com", "password": "p"}
+        "/auth/register", json={"email": "q3@test.com", "password": "password1"}
     )
     headers2 = {"X-User-Id": str(res.json()["user"]["id"])}
     res = await client.get("/queue", headers=headers2)

@@ -4,7 +4,7 @@ pytestmark = pytest.mark.anyio
 
 
 async def _setup(client):
-    reg = await client.post("/auth/register", json={"email": "bm@test.com", "password": "p"})
+    reg = await client.post("/auth/register", json={"email": "bm@test.com", "password": "password1"})
     uid = reg.json()["user"]["id"]
     h = {"X-User-Id": str(uid)}
     create = await client.post("/reads", json={"title": "BM Test", "content": "One. Two."}, headers=h)
