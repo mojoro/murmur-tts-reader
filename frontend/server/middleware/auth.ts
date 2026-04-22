@@ -24,8 +24,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
+  const config = useRuntimeConfig(event)
+  if (!config.jwtSecret) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Server misconfigured: NUXT_JWT_SECRET is unset',
+    })
+  }
   try {
-    const config = useRuntimeConfig(event)
     const userId = await verifyToken(token, config.jwtSecret)
     event.context.userId = userId
   } catch {

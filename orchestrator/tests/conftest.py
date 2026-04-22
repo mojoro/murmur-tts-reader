@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("MURMUR_ALLOW_DEV_SECRET", "1")
+
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 

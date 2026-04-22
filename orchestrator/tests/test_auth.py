@@ -36,3 +36,27 @@ async def test_get_me(client):
     res = await client.get("/auth/me", headers={"X-User-Id": str(user_id)})
     assert res.status_code == 200
     assert res.json()["email"] == "me@example.com"
+
+
+def test_jwt_secret_fails_closed_when_unset(monkeypatch):
+    """Missing MURMUR_JWT_SECRET should raise unless dev opt-in is set."""
+    from orchestrator.config import _resolve_jwt_secret
+    monkeypatch.delenv("MURMUR_JWT_SECRET", raising=False)
+    monkeypatch.delenv("MURMUR_ALLOW_DEV_SECRET", raising=False)
+    with pytest.raises(RuntimeError, match="MURMUR_JWT_SECRET"):
+        _resolve_jwt_secret()
+
+
+def test_jwt_secret_dev_opt_in(monkeypatch):
+    from orchestrator.config import _resolve_jwt_secret
+    monkeypatch.delenv("MURMUR_JWT_SECRET", raising=False)
+    monkeypatch.setenv("MURMUR_ALLOW_DEV_SECRET", "1")
+    secret = _resolve_jwt_secret()
+    assert "dev" in secret.lower()
+
+
+def test_jwt_secret_explicit_value_wins(monkeypatch):
+    from orchestrator.config import _resolve_jwt_secret
+    monkeypatch.setenv("MURMUR_JWT_SECRET", "a" * 32)
+    monkeypatch.delenv("MURMUR_ALLOW_DEV_SECRET", raising=False)
+    assert _resolve_jwt_secret() == "a" * 32

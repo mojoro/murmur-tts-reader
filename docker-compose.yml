@@ -21,7 +21,7 @@ services:
       - "4000:3000"
     environment:
       - NUXT_ORCHESTRATOR_URL=http://orchestrator:8000
-      - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+      - NUXT_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
     depends_on:
       orchestrator:
         condition: service_started
@@ -34,7 +34,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:-dev-secret-change-in-production}
+      - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
       - MURMUR_ALIGN_URL=http://align:8001
       - MURMUR_DATA_DIR=/app/data
       - HF_TOKEN=${HF_TOKEN:-}

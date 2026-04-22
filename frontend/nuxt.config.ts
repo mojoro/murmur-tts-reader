@@ -18,7 +18,8 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     orchestratorUrl: 'http://localhost:8000',
-    jwtSecret: 'dev-secret-change-in-production',
+    // Must be set via NUXT_JWT_SECRET env var in production.
+    jwtSecret: '',
   },
   css: ['./app.css'],
   devServer: {
