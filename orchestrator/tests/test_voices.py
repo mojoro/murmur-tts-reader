@@ -4,7 +4,7 @@ pytestmark = pytest.mark.anyio
 
 
 async def _auth(client) -> tuple[int, dict]:
-    res = await client.post("/auth/register", json={"email": "v@test.com", "password": "p"})
+    res = await client.post("/auth/register", json={"email": "v@test.com", "password": "password1"})
     uid = res.json()["user"]["id"]
     return uid, {"X-User-Id": str(uid)}
 

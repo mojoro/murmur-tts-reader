@@ -18,24 +18,40 @@ async def test_register_duplicate(client):
 
 
 async def test_login(client):
-    await client.post("/auth/register", json={"email": "login@example.com", "password": "pass"})
-    res = await client.post("/auth/login", json={"email": "login@example.com", "password": "pass"})
+    await client.post("/auth/register", json={"email": "login@example.com", "password": "password1"})
+    res = await client.post("/auth/login", json={"email": "login@example.com", "password": "password1"})
     assert res.status_code == 200
     assert "token" in res.json()
 
 
 async def test_login_wrong_password(client):
-    await client.post("/auth/register", json={"email": "wrong@example.com", "password": "right"})
+    await client.post("/auth/register", json={"email": "wrong@example.com", "password": "rightpassword"})
     res = await client.post("/auth/login", json={"email": "wrong@example.com", "password": "wrong"})
     assert res.status_code == 401
 
 
 async def test_get_me(client):
-    reg = await client.post("/auth/register", json={"email": "me@example.com", "password": "p"})
+    reg = await client.post("/auth/register", json={"email": "me@example.com", "password": "password1"})
     user_id = reg.json()["user"]["id"]
     res = await client.get("/auth/me", headers={"X-User-Id": str(user_id)})
     assert res.status_code == 200
     assert res.json()["email"] == "me@example.com"
+
+
+async def test_register_rejects_invalid_email(client):
+    res = await client.post(
+        "/auth/register",
+        json={"email": "not-an-email", "password": "password1234"},
+    )
+    assert res.status_code == 422
+
+
+async def test_register_rejects_short_password(client):
+    res = await client.post(
+        "/auth/register",
+        json={"email": "shortpw@example.com", "password": "short"},
+    )
+    assert res.status_code == 422
 
 
 def test_jwt_secret_fails_closed_when_unset(monkeypatch):

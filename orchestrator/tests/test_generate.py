@@ -7,7 +7,7 @@ pytestmark = pytest.mark.anyio
 async def _setup(client):
     """Register user and create a read with segments."""
     res = await client.post(
-        "/auth/register", json={"email": "gen@test.com", "password": "p"}
+        "/auth/register", json={"email": "gen@test.com", "password": "password1"}
     )
     uid = res.json()["user"]["id"]
     headers = {"X-User-Id": str(uid)}
@@ -67,7 +67,7 @@ async def test_generate_with_language(client, reset_engine_manager):
 
 async def test_generate_read_not_found(client, reset_engine_manager):
     res = await client.post(
-        "/auth/register", json={"email": "gen2@test.com", "password": "p"}
+        "/auth/register", json={"email": "gen2@test.com", "password": "password1"}
     )
     headers = {"X-User-Id": str(res.json()["user"]["id"])}
     reset_engine_manager._active_engine = "pocket-tts"
