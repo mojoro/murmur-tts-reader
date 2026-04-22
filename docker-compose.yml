@@ -38,6 +38,7 @@ services:
       - MURMUR_ALIGN_URL=http://align:8001
       - MURMUR_DATA_DIR=/app/data
       - HF_HOME=/app/data/hf-cache
+      - UV_CACHE_DIR=/app/data/uv-cache
       - HF_TOKEN=${HF_TOKEN:-}
     depends_on:
       align:
