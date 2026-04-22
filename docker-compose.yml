@@ -37,6 +37,7 @@ services:
       - MURMUR_JWT_SECRET=${MURMUR_JWT_SECRET:?MURMUR_JWT_SECRET must be set in .env}
       - MURMUR_ALIGN_URL=http://align:8001
       - MURMUR_DATA_DIR=/app/data
+      - HF_HOME=/app/data/hf-cache
       - HF_TOKEN=${HF_TOKEN:-}
     depends_on:
       align:
