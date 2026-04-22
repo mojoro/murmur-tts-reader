@@ -43,6 +43,11 @@ ENV MURMUR_DATA_DIR=/app/data
 ENV COQUI_TOS_AGREED=1
 ENV TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 
+# Make /app writable by the non-root runtime user (docker-compose pins UID 1000).
+# Engines create .venv directories at install time; those writes fail if files
+# baked in by the build stage are owned by root.
+RUN chown -R 1000:1000 /app
+
 EXPOSE 8000
 
 CMD ["orchestrator/.venv/bin/uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]
