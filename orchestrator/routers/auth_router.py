@@ -18,10 +18,10 @@ async def register(
     _: None = Depends(rate_limit_register),
     db: aiosqlite.Connection = Depends(get_db),
 ):
-    logger.info("Register attempt for email=%s", req.email)
+    logger.info("Register attempt")
     existing = await db.execute_fetchall("SELECT id FROM users WHERE email = ?", (req.email,))
     if existing:
-        logger.warning("Register failed: email=%s already exists", req.email)
+        logger.warning("Register failed: duplicate email")
         raise HTTPException(status_code=409, detail="Email already registered")
 
     cursor = await db.execute(
@@ -30,7 +30,7 @@ async def register(
     )
     await db.commit()
     user_id = cursor.lastrowid
-    logger.info("Registered user id=%d email=%s", user_id, req.email)
+    logger.info("Registered user id=%d", user_id)
 
     row = await db.execute_fetchall("SELECT * FROM users WHERE id = ?", (user_id,))
     user = dict(row[0])
@@ -47,19 +47,19 @@ async def login(
     _: None = Depends(rate_limit_login),
     db: aiosqlite.Connection = Depends(get_db),
 ):
-    logger.info("Login attempt for email=%s", req.email)
+    logger.info("Login attempt")
     rows = await db.execute_fetchall("SELECT * FROM users WHERE email = ?", (req.email,))
     if not rows:
-        logger.warning("Login failed: email=%s not found", req.email)
+        logger.warning("Login failed: unknown email")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user = dict(rows[0])
     if not verify_password(req.password, user["password_hash"]):
-        logger.warning("Login failed: wrong password for email=%s", req.email)
+        logger.warning("Login failed: wrong password for user id=%d", user["id"])
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_token(user["id"])
-    logger.info("Login success for user id=%d email=%s", user["id"], req.email)
+    logger.info("Login success for user id=%d", user["id"])
     return AuthResponse(
         user=UserResponse(id=user["id"], email=user["email"], display_name=user["display_name"], created_at=user["created_at"]),
         token=token,
@@ -70,7 +70,7 @@ async def login(
 async def get_me(user_id: int = Depends(get_current_user_id), db: aiosqlite.Connection = Depends(get_db)):
     rows = await db.execute_fetchall("SELECT * FROM users WHERE id = ?", (user_id,))
     if not rows:
-        logger.error("User id=%d from token not found in DB", user_id)
+        logger.error("User from token not found", extra={"user_id": user_id})
         raise HTTPException(status_code=404, detail="User not found")
     user = dict(rows[0])
     return UserResponse(id=user["id"], email=user["email"], display_name=user["display_name"], created_at=user["created_at"])
