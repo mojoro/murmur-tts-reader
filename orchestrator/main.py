@@ -1,13 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+import aiosqlite
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
 import orchestrator.config as config
+from orchestrator.auth import get_current_user_id
 from orchestrator.config import AUDIO_DIR, DATA_DIR
-from orchestrator.db import init_db, open_db
+from orchestrator.db import get_db, init_db, open_db
 from orchestrator.engine_manager import engine_manager
 from orchestrator.job_worker import job_worker
 from orchestrator.routers.auth_router import router as auth_router
@@ -106,7 +108,12 @@ app.include_router(queue_router)
 
 
 @app.get("/audio/{read_id}/bundle")
-async def serve_audio_bundle(read_id: int, segments: str | None = None):
+async def serve_audio_bundle(
+    read_id: int,
+    segments: str | None = None,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     """Serve audio segments for a read as a single zip (ZIP_STORED).
 
     If ``segments`` is provided (comma-separated indices), only those
@@ -114,6 +121,12 @@ async def serve_audio_bundle(read_id: int, segments: str | None = None):
     """
     import io
     import zipfile
+
+    owns = await db.execute_fetchall(
+        "SELECT 1 FROM reads WHERE id = ? AND user_id = ?", (read_id, user_id)
+    )
+    if not owns:
+        raise HTTPException(status_code=404, detail="No audio found")
 
     audio_dir = config.AUDIO_DIR / str(read_id)
     if not audio_dir.exists():
@@ -148,7 +161,17 @@ async def serve_audio_bundle(read_id: int, segments: str | None = None):
 
 
 @app.get("/audio/{read_id}/{segment_index}")
-async def serve_audio(read_id: int, segment_index: int):
+async def serve_audio(
+    read_id: int,
+    segment_index: int,
+    user_id: int = Depends(get_current_user_id),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    owns = await db.execute_fetchall(
+        "SELECT 1 FROM reads WHERE id = ? AND user_id = ?", (read_id, user_id)
+    )
+    if not owns:
+        raise HTTPException(status_code=404, detail="Audio not found")
     path = config.AUDIO_DIR / str(read_id) / f"{segment_index}.wav"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Audio not found")
